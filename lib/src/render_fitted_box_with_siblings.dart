@@ -379,12 +379,15 @@ class RenderFittedBoxWithSiblings extends RenderBox
     _transform = null;
   }
 
+  bool get _hasEmptyFirstChild =>
+      firstChild != null && firstChild!.size.isEmpty;
+
   void _updatePaintData() {
     if (_transform != null) {
       return;
     }
 
-    if (firstChild == null) {
+    if (firstChild == null || _hasEmptyFirstChild) {
       _hasVisualOverflow = false;
       _transform = Matrix4.identity();
     } else {
@@ -451,11 +454,14 @@ class RenderFittedBoxWithSiblings extends RenderBox
     Offset offset,
   ) {
     TransformLayer? layer;
+    final skipFirstChild = _hasEmptyFirstChild;
     var child = firstChild;
     while (child != null) {
       final childParentData = child.parentData! as StackParentData;
       if (identical(child, firstChild)) {
-        layer = _paintFirstChildWithTransform(context, offset);
+        if (!skipFirstChild) {
+          layer = _paintFirstChildWithTransform(context, offset);
+        }
       } else {
         context.paintChild(child, childParentData.offset + offset);
       }
@@ -467,7 +473,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (firstChild == null || size.isEmpty || firstChild!.size.isEmpty) {
+    if (firstChild == null || size.isEmpty) {
       return;
     }
     _updatePaintData();
@@ -488,23 +494,28 @@ class RenderFittedBoxWithSiblings extends RenderBox
 
   @override
   bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
-    if (firstChild == null || size.isEmpty || firstChild!.size.isEmpty) {
+    if (firstChild == null || size.isEmpty) {
       return false;
     }
 
+    final skipFirstChild = _hasEmptyFirstChild;
     var child = lastChild;
     while (child != null) {
       final childParentData = child.parentData! as StackParentData;
       final bool isHit;
 
       if (identical(child, firstChild)) {
-        _updatePaintData();
-        isHit = result.addWithPaintTransform(
-          transform: _transform,
-          position: position,
-          hitTest: (result, position) =>
-              child!.hitTest(result, position: position),
-        );
+        if (skipFirstChild) {
+          isHit = false;
+        } else {
+          _updatePaintData();
+          isHit = result.addWithPaintTransform(
+            transform: _transform,
+            position: position,
+            hitTest: (result, position) =>
+                child!.hitTest(result, position: position),
+          );
+        }
       } else {
         // The x, y parameters have the top left of the box as the origin.
         isHit = result.addWithPaintOffset(

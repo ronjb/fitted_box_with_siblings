@@ -249,6 +249,244 @@ void main() {
   });
 
   // More tests in ../widgets/stack_test.dart
+
+  group('Sibling layout', () {
+    test('siblings are laid out with tight constraints from rects', () {
+      final sibling1 = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      final sibling2 = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          const Rect.fromLTWH(0, 0, 200, 150),
+          const Rect.fromLTWH(10, 20, 120, 45),
+          const Rect.fromLTWH(200, 100, 80, 60),
+        ],
+        children: <RenderBox>[
+          RenderSizedBox(const Size(100, 50)),
+          sibling1,
+          sibling2,
+        ],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+      );
+
+      // Siblings should be sized to match their rects.
+      expect(sibling1.size, equals(const Size(120, 45)));
+      expect(sibling2.size, equals(const Size(80, 60)));
+    });
+
+    test('sibling offsets match rect positions', () {
+      final sibling1 = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      final sibling2 = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          const Rect.fromLTWH(0, 0, 200, 150),
+          const Rect.fromLTWH(10, 20, 120, 45),
+          const Rect.fromLTWH(200, 100, 80, 60),
+        ],
+        children: <RenderBox>[
+          RenderSizedBox(const Size(100, 50)),
+          sibling1,
+          sibling2,
+        ],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+      );
+
+      final offset1 = (sibling1.parentData! as StackParentData).offset;
+      expect(offset1, equals(const Offset(10, 20)));
+
+      final offset2 = (sibling2.parentData! as StackParentData).offset;
+      expect(offset2, equals(const Offset(200, 100)));
+    });
+  });
+
+  group('Paint behavior', () {
+    test('all children are painted', () {
+      var fittedChildPainted = false;
+      var siblingPainted = false;
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          const Rect.fromLTWH(0, 0, 200, 150),
+          const Rect.fromLTWH(10, 20, 100, 50),
+        ],
+        children: <RenderBox>[
+          RenderCustomPaint(
+            preferredSize: const Size(100, 50),
+            painter: TestCallbackPainter(
+              onPaint: () => fittedChildPainted = true,
+            ),
+          ),
+          RenderCustomPaint(
+            painter: TestCallbackPainter(onPaint: () => siblingPainted = true),
+          ),
+        ],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+        phase: EnginePhase.paint,
+      );
+
+      expect(fittedChildPainted, isTrue);
+      expect(siblingPainted, isTrue);
+    });
+
+    test('siblings paint when fitted child has empty size (issue #5)', () {
+      var siblingPainted = false;
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          const Rect.fromLTWH(10, 10, 100, 50),
+        ],
+        children: <RenderBox>[
+          // First child with empty preferred size.
+          RenderCustomPaint(
+            preferredSize: Size.zero,
+            painter: TestCallbackPainter(onPaint: () {}),
+          ),
+          RenderCustomPaint(
+            painter: TestCallbackPainter(onPaint: () => siblingPainted = true),
+          ),
+        ],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+        phase: EnginePhase.paint,
+      );
+
+      // This test exposes issue #5: paint() returns early when
+      // firstChild.size.isEmpty, skipping siblings.
+      expect(siblingPainted, isTrue);
+    });
+  });
+
+  group('Hit testing', () {
+    test('hit test finds sibling at its rect position', () {
+      final sibling = RenderSizedBox(const Size(100, 50));
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          const Rect.fromLTWH(0, 0, 200, 150),
+          const Rect.fromLTWH(10, 20, 100, 50),
+        ],
+        children: <RenderBox>[RenderSizedBox(const Size(100, 50)), sibling],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+        phase: EnginePhase.composite,
+        onErrors: expectNoFlutterErrors,
+      );
+
+      final result = BoxHitTestResult();
+      // Hit at center of sibling rect: (10+50, 20+25) = (60, 45).
+      final hit = fittedBox.hitTestChildren(
+        result,
+        position: const Offset(60, 45),
+      );
+      expect(hit, isTrue);
+    });
+
+    test('hit test on fitted child applies transform', () {
+      final fittedChild = RenderSizedBox(const Size(100, 50));
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+        children: <RenderBox>[fittedChild],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(200, 200)),
+        phase: EnginePhase.composite,
+        onErrors: expectNoFlutterErrors,
+      );
+
+      // With contain: 100x50 in 200x200, scale = 2.0.
+      // Dest is 200x100 centered at y=50.
+      final result = BoxHitTestResult();
+      // Hit at center of the widget: (100, 100). This is inside the
+      // scaled child (dest y: 50..150).
+      final hit = fittedBox.hitTestChildren(
+        result,
+        position: const Offset(100, 100),
+      );
+      expect(hit, isTrue);
+
+      // Hit outside the scaled child (y < 50).
+      final result2 = BoxHitTestResult();
+      final hit2 = fittedBox.hitTestChildren(
+        result2,
+        position: const Offset(100, 10),
+      );
+      expect(hit2, isFalse);
+    });
+  });
+
+  group('Property setters', () {
+    test('setting fit to scaleDown triggers layout', () {
+      final fittedBox = RenderFittedBoxWithSiblings(
+        fit: BoxFit.contain,
+        computeRects: (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+        children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(200, 200)),
+      );
+
+      // Changing to scaleDown should trigger layout (since scaleDown affects
+      // layout).
+      fittedBox.fit = BoxFit.scaleDown;
+      expect(fittedBox.debugNeedsLayout, isTrue);
+    });
+
+    test('setting computeRects triggers layout', () {
+      final fittedBox = RenderFittedBoxWithSiblings(
+        computeRects: (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+        children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(200, 200)),
+      );
+
+      fittedBox.computeRects = (constraints, boxSize) => [
+        const Rect.fromLTWH(0, 0, 100, 100),
+      ];
+      expect(fittedBox.debugNeedsLayout, isTrue);
+    });
+  });
 }
 
 // Forces two frames and checks that:
