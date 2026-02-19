@@ -1,5 +1,5 @@
 name: fitted_box_with_siblings
-description: "A new Flutter package project."
+description: "A widget that scales a first child like FittedBox while positioning sibling widgets at computed rects."
 version: 0.0.1
 homepage: https://github.com/ronjb/fitted_box_with_siblings
 
