@@ -21,7 +21,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
   RenderFittedBoxWithSiblings({
     List<RenderBox>? children,
     BoxFit fit = BoxFit.contain,
-    AlignmentGeometry alignment = AlignmentDirectional.center,
+    AlignmentGeometry alignment = Alignment.center,
     TextDirection? textDirection,
     StackFit stackFit = StackFit.loose,
     Clip clipBehavior = Clip.none,
@@ -31,7 +31,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
        _textDirection = textDirection,
        _stackFit = stackFit,
        _clipBehavior = clipBehavior,
-       _rectForSibling = computeRects {
+       _computeRects = computeRects {
     addAll(children);
   }
 
@@ -122,11 +122,11 @@ class RenderFittedBoxWithSiblings extends RenderBox
     }
   }
 
-  RectsForFittedBoxWithSiblings get computeRects => _rectForSibling;
-  RectsForFittedBoxWithSiblings _rectForSibling;
+  RectsForFittedBoxWithSiblings get computeRects => _computeRects;
+  RectsForFittedBoxWithSiblings _computeRects;
   set computeRects(RectsForFittedBoxWithSiblings value) {
-    if (_rectForSibling != value) {
-      _rectForSibling = value;
+    if (_computeRects != value) {
+      _computeRects = value;
       _clearPaintData();
       markNeedsLayout();
     }
@@ -258,7 +258,6 @@ class RenderFittedBoxWithSiblings extends RenderBox
   @override
   void performLayout() {
     final constraints = this.constraints;
-    _hasVisualOverflow ??= false;
 
     final result = _computeSize(
       constraints: constraints,
@@ -448,7 +447,6 @@ class RenderFittedBoxWithSiblings extends RenderBox
     return null;
   }
 
-  @protected
   TransformLayer? _paintFittedBoxWithSiblings(
     PaintingContext context,
     Offset offset,
