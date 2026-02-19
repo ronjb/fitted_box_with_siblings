@@ -125,11 +125,9 @@ class RenderFittedBoxWithSiblings extends RenderBox
   RectsForFittedBoxWithSiblings get computeRects => _computeRects;
   RectsForFittedBoxWithSiblings _computeRects;
   set computeRects(RectsForFittedBoxWithSiblings value) {
-    if (_computeRects != value) {
-      _computeRects = value;
-      _clearPaintData();
-      markNeedsLayout();
-    }
+    _computeRects = value;
+    _clearPaintData();
+    markNeedsLayout();
   }
 
   static double getIntrinsicDimension(
