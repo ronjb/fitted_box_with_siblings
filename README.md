@@ -4,6 +4,18 @@
 
 A Flutter widget that scales and positions a first child (the "box") within itself according to `BoxFit` (like `FittedBox`), while allowing additional sibling widgets to fill their own defined rectangles.
 
+## Why use this package?
+
+`FittedBox` scales a child to fit, and `Stack` lets you layer widgets — but neither lets a sibling's position depend on the scaled child's *actual* laid-out rect. With `FittedBoxWithSiblings`, your `computeRects` callback receives the parent's constraints **and** the first child's natural size, so you can lay out siblings relative to where the box will end up after `BoxFit` scaling.
+
+Reach for it when you want to:
+
+- Put a header, footer, or toolbar alongside a `BoxFit.contain` image and have the image fill the leftover space exactly.
+- Place overlays, badges, or annotations whose position depends on the scaled box's bounds (not the parent's bounds).
+- Build composite layouts where one child drives the geometry of the rest, without manually measuring with `LayoutBuilder` + `Stack`.
+
+If you only need to scale a single child, use `FittedBox`. If you need free-form layering without geometry sharing, use `Stack`. This widget fills the gap between them.
+
 ## Getting Started
 
 Add this to your `pubspec.yaml`:

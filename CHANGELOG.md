@@ -1,3 +1,9 @@
+## 1.0.0
+
+* First stable release.
+* Expanded README with a "Why use this package?" section.
+* Updated package description.
+
 ## 0.1.0
 
 * Initial release.
