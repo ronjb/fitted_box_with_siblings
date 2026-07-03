@@ -5,10 +5,15 @@ import 'render_fitted_box_with_siblings.dart';
 
 /// A widget which scales and positions the first child (the "box") within
 /// itself according to [fit], similar to [FittedBox]. The positioning of the
-/// box and its siblings is determined by [computeRects], which is given the
-/// overall constraints and the size returned by calling `layout` on the first
-/// child (the "box"), and must return the rectangles for the box and its
-/// siblings.
+/// box and its siblings is determined by the [delegate], whose
+/// [FittedBoxWithSiblingsDelegate.computeRects] method is given the overall
+/// constraints and the size returned by calling `layout` on the first child
+/// (the "box"), and must return the rectangles for the box and its siblings.
+///
+/// The intrinsic dimensions of this widget are approximated from the
+/// children's intrinsic dimensions and may not match the size that results
+/// from [FittedBoxWithSiblingsDelegate.computeRects], so wrapping this widget
+/// in [IntrinsicWidth] or [IntrinsicHeight] is discouraged.
 ///
 /// See also:
 ///
@@ -16,12 +21,12 @@ import 'render_fitted_box_with_siblings.dart';
 ///   to [fit] and [alignment].
 /// * The [catalog of layout widgets](https://flutter.dev/widgets/layout/).
 class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
-  /// Creates A widget which scales and positions the first child (the "box")
+  /// Creates a widget which scales and positions the first child (the "box")
   /// within itself according to [fit], similar to [FittedBox]. The positioning
-  /// of the box and its siblings is determined by [computeRects], which is
-  /// given the overall constraints and the size returned by calling `layout`
-  /// on the first child (the "box"), and must return the rectangles for the
-  /// box and its siblings.
+  /// of the box and its siblings is determined by the [delegate], whose
+  /// [FittedBoxWithSiblingsDelegate.computeRects] method is given the overall
+  /// constraints and the size returned by calling `layout` on the first child
+  /// (the "box"), and must return the rectangles for the box and its siblings.
   const FittedBoxWithSiblings({
     super.key,
     this.fit = BoxFit.contain,
@@ -29,7 +34,7 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
     this.textDirection,
     this.stackFit = StackFit.loose,
     this.clipBehavior = Clip.none,
-    required this.computeRects,
+    required this.delegate,
     super.children,
   });
 
@@ -57,11 +62,17 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
   /// Defaults to the ambient [Directionality].
   final TextDirection? textDirection;
 
-  /// How to size the first child (i.e. the "box").
+  /// How to transform the constraints passed to the [delegate]'s
+  /// [FittedBoxWithSiblingsDelegate.computeRects] method.
   ///
   /// The constraints passed into the [FittedBoxWithSiblings] from its parent
-  /// are either loosened ([StackFit.loose]) or tightened to their biggest size
-  /// ([StackFit.expand]).
+  /// are either loosened ([StackFit.loose]), tightened to their biggest size
+  /// ([StackFit.expand]), or passed through unmodified
+  /// ([StackFit.passthrough]) before being given to
+  /// [FittedBoxWithSiblingsDelegate.computeRects].
+  ///
+  /// This does not affect how the first child (the "box") is laid out — it is
+  /// always laid out unconstrained, like the child of a [FittedBox].
   final StackFit stackFit;
 
   /// {@macro flutter.material.Material.clipBehavior}
@@ -69,10 +80,13 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
   /// Defaults to [Clip.none].
   final Clip clipBehavior;
 
-  /// A function which is given the overall constraints and the size returned
-  /// by calling `layout` on the first child (the "box"), and must return the
-  /// rectangles for the box and its siblings.
-  final RectsForFittedBoxWithSiblings computeRects;
+  /// The delegate that computes the rectangles for the box and its siblings.
+  ///
+  /// Its [FittedBoxWithSiblingsDelegate.computeRects] method is given the
+  /// overall constraints and the size returned by calling `layout` on the
+  /// first child (the "box"), and must return the rectangles for the box and
+  /// its siblings.
+  final FittedBoxWithSiblingsDelegate delegate;
 
   @override
   RenderFittedBoxWithSiblings createRenderObject(BuildContext context) {
@@ -83,7 +97,7 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
       textDirection: textDirection ?? Directionality.maybeOf(context),
       stackFit: stackFit,
       clipBehavior: clipBehavior,
-      computeRects: computeRects,
+      delegate: delegate,
     );
   }
 
@@ -99,7 +113,7 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
       ..textDirection = textDirection ?? Directionality.maybeOf(context)
       ..stackFit = stackFit
       ..clipBehavior = clipBehavior
-      ..computeRects = computeRects;
+      ..delegate = delegate;
   }
 
   @override

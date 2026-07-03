@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../test_rects_delegate.dart';
+
 void main() {
   group('Multi-child layout and positioning', () {
     testWidgets('siblings are positioned at their computed rects', (
@@ -20,11 +22,13 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                const Rect.fromLTWH(0, 0, 400, 300),
-                const Rect.fromLTWH(10, 20, 100, 40),
-                const Rect.fromLTWH(200, 150, 80, 60),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 400, 300),
+                  const Rect.fromLTWH(10, 20, 100, 40),
+                  const Rect.fromLTWH(200, 150, 80, 60),
+                ],
+              ),
               children: [
                 const SizedBox(width: 100, height: 50),
                 Container(color: Colors.red),
@@ -64,11 +68,13 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                const Rect.fromLTWH(0, 0, 400, 300),
-                const Rect.fromLTWH(10, 20, 120, 45),
-                const Rect.fromLTWH(200, 150, 80, 60),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 400, 300),
+                  const Rect.fromLTWH(10, 20, 120, 45),
+                  const Rect.fromLTWH(200, 150, 80, 60),
+                ],
+              ),
               children: [
                 const SizedBox(width: 100, height: 50),
                 Container(color: Colors.red),
@@ -104,14 +110,16 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -146,14 +154,16 @@ void main() {
             height: 200,
             child: FittedBoxWithSiblings(
               fit: BoxFit.fill,
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -189,10 +199,12 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                const Rect.fromLTWH(0, 0, 200, 150),
-                const Rect.fromLTWH(200, 0, 200, 150),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 150),
+                  const Rect.fromLTWH(200, 0, 200, 150),
+                ],
+              ),
               children: [
                 const SizedBox(width: 100, height: 50),
                 GestureDetector(
@@ -226,14 +238,16 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -262,12 +276,14 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                const Rect.fromLTWH(0, 0, 200, 150),
-                // Overlapping rects for siblings.
-                const Rect.fromLTWH(100, 50, 200, 150),
-                const Rect.fromLTWH(100, 50, 200, 150),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 150),
+                  // Overlapping rects for siblings.
+                  const Rect.fromLTWH(100, 50, 200, 150),
+                  const Rect.fromLTWH(100, 50, 200, 150),
+                ],
+              ),
               children: [
                 const SizedBox(width: 100, height: 50),
                 GestureDetector(
@@ -306,15 +322,17 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-                const Rect.fromLTWH(10, 10, 100, 50),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                  const Rect.fromLTWH(10, 10, 100, 50),
+                ],
+              ),
               children: [
                 const SizedBox.shrink(),
                 Container(color: Colors.red),
@@ -361,15 +379,17 @@ void main() {
             width: 400,
             height: 300,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-                const Rect.fromLTWH(10, 10, 100, 50),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                  const Rect.fromLTWH(10, 10, 100, 50),
+                ],
+              ),
               children: [
                 const SizedBox.shrink(),
                 GestureDetector(
@@ -403,14 +423,16 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -443,10 +465,12 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                // Only 1 rect, but 2 children.
-                const Rect.fromLTWH(0, 0, 200, 200),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  // Only 1 rect, but 2 children.
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                ],
+              ),
               children: [
                 const SizedBox(width: 100, height: 50),
                 Container(color: Colors.red),
@@ -459,6 +483,57 @@ void main() {
       expect(tester.takeException(), isA<FlutterError>());
     });
 
+    testWidgets('computeRects error: empty rects list', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              delegate: TestRectsDelegate((constraints, boxSize) => []),
+              children: [
+                const SizedBox(width: 100, height: 50),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // An empty rects list must produce a descriptive FlutterError, not a
+      // bare ArgumentError from an internal helper.
+      expect(tester.takeException(), isA<FlutterError>());
+    });
+
+    testWidgets('computeRects error: too many rects', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  // 2 rects, but only 1 child.
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(0, 0, 400, 400),
+                ],
+              ),
+              children: [const SizedBox(width: 100, height: 50)],
+            ),
+          ),
+        ),
+      );
+
+      // Extra rects must not be silently accepted (they would otherwise
+      // inflate the bounding box and therefore the widget's size).
+      expect(tester.takeException(), isA<FlutterError>());
+    });
+
     testWidgets('computeRects error: non-finite rects', (
       WidgetTester tester,
     ) async {
@@ -468,9 +543,11 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                const Rect.fromLTWH(0, 0, double.nan, 200),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, double.nan, 200),
+                ],
+              ),
               children: [const SizedBox(width: 100, height: 50)],
             ),
           ),
@@ -480,6 +557,180 @@ void main() {
       // The non-finite rect causes a FlutterError in performLayout, which
       // cascades into multiple exceptions as the framework tries to continue.
       expect(tester.takeException(), isNotNull);
+    });
+  });
+
+  group('Clipping of overflowing siblings', () {
+    testWidgets('sibling overflowing bottom-right is clipped with '
+        'Clip.hardEdge', (WidgetTester tester) async {
+      // Parent is a tight 200x200. The sibling rect extends to (250, 250),
+      // beyond the constrained size, so with Clip.hardEdge the render object
+      // must clip to its bounds.
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              clipBehavior: Clip.hardEdge,
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(150, 150, 100, 100),
+                ],
+              ),
+              children: [
+                const SizedBox(width: 100, height: 50),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final renderObject = tester.firstRenderObject<RenderBox>(
+        find.byType(FittedBoxWithSiblings),
+      );
+      expect(renderObject.size, equals(const Size(200, 200)));
+      expect(
+        renderObject,
+        paints..clipRect(rect: const Rect.fromLTWH(0, 0, 200, 200)),
+      );
+    });
+
+    testWidgets('sibling overflowing top-left is clipped with Clip.hardEdge', (
+      WidgetTester tester,
+    ) async {
+      // The sibling rect has negative left/top, so it paints outside the
+      // render object's bounds above and to the left.
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              clipBehavior: Clip.hardEdge,
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(-50, -50, 100, 100),
+                ],
+              ),
+              children: [
+                const SizedBox(width: 100, height: 50),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final renderObject = tester.firstRenderObject<RenderBox>(
+        find.byType(FittedBoxWithSiblings),
+      );
+      expect(
+        renderObject,
+        paints..clipRect(rect: const Rect.fromLTWH(0, 0, 200, 200)),
+      );
+    });
+
+    testWidgets('sibling overflow is clipped when the fitted child is empty', (
+      WidgetTester tester,
+    ) async {
+      // Even when the first child has an empty size, overflowing siblings
+      // must still be clipped when clipBehavior is not Clip.none.
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              clipBehavior: Clip.hardEdge,
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(150, 150, 100, 100),
+                ],
+              ),
+              children: [
+                const SizedBox.shrink(),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final renderObject = tester.firstRenderObject<RenderBox>(
+        find.byType(FittedBoxWithSiblings),
+      );
+      expect(
+        renderObject,
+        paints..clipRect(rect: const Rect.fromLTWH(0, 0, 200, 200)),
+      );
+    });
+
+    testWidgets('overflowing sibling is not clipped with Clip.none', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(150, 150, 100, 100),
+                ],
+              ),
+              children: [
+                const SizedBox(width: 100, height: 50),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final renderObject = tester.firstRenderObject<RenderBox>(
+        find.byType(FittedBoxWithSiblings),
+      );
+      expect(renderObject, isNot(paints..clipRect()));
+    });
+
+    testWidgets('no clip is pushed when nothing overflows', (
+      WidgetTester tester,
+    ) async {
+      // With Clip.hardEdge but no overflow (fit or sibling), no clip should
+      // be pushed, matching FittedBox behavior.
+      await tester.pumpWidget(
+        Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: FittedBoxWithSiblings(
+              clipBehavior: Clip.hardEdge,
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  const Rect.fromLTWH(0, 0, 200, 200),
+                  const Rect.fromLTWH(10, 10, 100, 50),
+                ],
+              ),
+              children: [
+                const SizedBox(width: 100, height: 50),
+                Container(color: Colors.red),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final renderObject = tester.firstRenderObject<RenderBox>(
+        find.byType(FittedBoxWithSiblings),
+      );
+      expect(renderObject, isNot(paints..clipRect()));
     });
   });
 
@@ -494,14 +745,16 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -521,14 +774,16 @@ void main() {
             height: 200,
             child: FittedBoxWithSiblings(
               fit: BoxFit.fill,
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -554,14 +809,16 @@ void main() {
             height: 200,
             child: FittedBoxWithSiblings(
               alignment: Alignment.center,
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -581,14 +838,16 @@ void main() {
             height: 200,
             child: FittedBoxWithSiblings(
               alignment: Alignment.topLeft,
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [SizedBox(key: insideKey, width: 100, height: 50)],
             ),
           ),
@@ -610,14 +869,16 @@ void main() {
             width: 200,
             height: 200,
             child: FittedBoxWithSiblings(
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [const SizedBox(width: 100, height: 50)],
             ),
           ),
@@ -637,14 +898,16 @@ void main() {
             height: 200,
             child: FittedBoxWithSiblings(
               clipBehavior: Clip.hardEdge,
-              computeRects: (constraints, boxSize) => [
-                Rect.fromLTWH(
-                  0,
-                  0,
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                ),
-              ],
+              delegate: TestRectsDelegate(
+                (constraints, boxSize) => [
+                  Rect.fromLTWH(
+                    0,
+                    0,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ],
+              ),
               children: [const SizedBox(width: 100, height: 50)],
             ),
           ),
@@ -653,5 +916,47 @@ void main() {
 
       expect(renderObject.clipBehavior, equals(Clip.hardEdge));
     });
+
+    testWidgets('rebuilding with an equivalent delegate does not relayout', (
+      WidgetTester tester,
+    ) async {
+      final computeCount = [0];
+      Widget build() => Center(
+        child: SizedBox(
+          width: 200,
+          height: 200,
+          child: FittedBoxWithSiblings(
+            delegate: _CountingRectsDelegate(computeCount),
+            children: [const SizedBox(width: 100, height: 50)],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(build());
+      expect(computeCount[0], equals(1));
+
+      // Rebuild with a new but equivalent delegate instance (same
+      // runtimeType, shouldRelayout returns false); layout must not run
+      // again.
+      await tester.pumpWidget(build());
+      expect(computeCount[0], equals(1));
+    });
   });
+}
+
+// A delegate that counts computeRects calls in the shared [computeCount]
+// list and never requests relayout.
+class _CountingRectsDelegate extends FittedBoxWithSiblingsDelegate {
+  const _CountingRectsDelegate(this.computeCount);
+
+  final List<int> computeCount;
+
+  @override
+  List<Rect> computeRects(BoxConstraints constraints, Size boxSize) {
+    computeCount[0]++;
+    return [Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight)];
+  }
+
+  @override
+  bool shouldRelayout(_CountingRectsDelegate oldDelegate) => false;
 }

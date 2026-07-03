@@ -6,7 +6,7 @@ A Flutter widget that scales and positions a first child (the "box") within itse
 
 ## Why use this package?
 
-`FittedBox` scales a child to fit, and `Stack` lets you layer widgets — but neither lets a sibling's position depend on the scaled child's *actual* laid-out rect. With `FittedBoxWithSiblings`, your `computeRects` callback receives the parent's constraints **and** the first child's natural size, so you can lay out siblings relative to where the box will end up after `BoxFit` scaling.
+`FittedBox` scales a child to fit, and `Stack` lets you layer widgets — but neither lets a sibling's position depend on the scaled child's *actual* laid-out rect. With `FittedBoxWithSiblings`, your delegate's `computeRects` method receives the parent's constraints **and** the first child's natural size, so you can lay out siblings relative to where the box will end up after `BoxFit` scaling.
 
 Reach for it when you want to:
 
@@ -22,7 +22,7 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fitted_box_with_siblings: ^0.0.1
+  fitted_box_with_siblings: ^2.0.0
 ```
 
 ## Usage
@@ -31,14 +31,16 @@ dependencies:
 import 'package:fitted_box_with_siblings/fitted_box_with_siblings.dart';
 ```
 
-`FittedBoxWithSiblings` takes a required `computeRects` callback and a list of `children`. The callback receives the parent's constraints and the first child's natural size, and returns a `List<Rect>` — one rect per child — defining where each child is placed.
+`FittedBoxWithSiblings` takes a required `delegate` — a subclass of `FittedBoxWithSiblingsDelegate` — and a list of `children`. The delegate's `computeRects` method receives the parent's constraints and the first child's natural size, and returns a `List<Rect>` — one rect per child — defining where each child is placed.
 
 The first child is the "fitted" child, scaled into its rect according to the `fit` property (defaults to `BoxFit.contain`). All subsequent children are siblings that fill their assigned rects.
 
 ```dart
-FittedBoxWithSiblings(
-  fit: BoxFit.contain,
-  computeRects: (constraints, boxSize) {
+class HeaderAndBoxDelegate extends FittedBoxWithSiblingsDelegate {
+  const HeaderAndBoxDelegate();
+
+  @override
+  List<Rect> computeRects(BoxConstraints constraints, Size boxSize) {
     final centerX = constraints.maxWidth / 2;
     return [
       // Rect for the fitted child (scaled via BoxFit).
@@ -48,7 +50,19 @@ FittedBoxWithSiblings(
       // Rect for the second sibling.
       Rect.fromLTWH(centerX, 0, centerX, 100),
     ];
-  },
+  }
+
+  // The rects depend only on the constraints and box size passed to
+  // computeRects, so an equivalent new instance never needs a relayout.
+  @override
+  bool shouldRelayout(HeaderAndBoxDelegate oldDelegate) => false;
+}
+
+// ...
+
+FittedBoxWithSiblings(
+  fit: BoxFit.contain,
+  delegate: const HeaderAndBoxDelegate(),
   children: [
     Text('Scaled to fit'),
     Container(color: Colors.yellow, child: Text('Left header')),
@@ -57,6 +71,8 @@ FittedBoxWithSiblings(
 )
 ```
 
+If your rects depend on state outside the delegate, pass that state in through the delegate's constructor and compare it in `shouldRelayout`, returning true when it changed.
+
 ### Properties
 
 | Property | Type | Default | Description |
@@ -64,8 +80,8 @@ FittedBoxWithSiblings(
 | `fit` | `BoxFit` | `BoxFit.contain` | How to inscribe the first child into its rect. |
 | `alignment` | `AlignmentGeometry` | `Alignment.center` | How to align the first child within its rect. |
 | `clipBehavior` | `Clip` | `Clip.none` | Whether and how to clip children that overflow. |
-| `stackFit` | `StackFit` | `StackFit.loose` | How to size the first child before fitting. |
-| `computeRects` | `RectsForFittedBoxWithSiblings` | required | Callback that returns rects for each child. |
+| `stackFit` | `StackFit` | `StackFit.loose` | How to transform the constraints passed to `computeRects`. |
+| `delegate` | `FittedBoxWithSiblingsDelegate` | required | Delegate whose `computeRects` method returns rects for each child. |
 
 ## Add an Issue for Missing Features
 

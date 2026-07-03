@@ -1,6 +1,6 @@
 name: fitted_box_with_siblings
 description: "A Flutter widget that scales a first child like FittedBox while letting sibling widgets fill rects you compute alongside it."
-version: 1.0.0
+version: 2.0.0
 homepage: https://github.com/ronjb/fitted_box_with_siblings
 
 environment:

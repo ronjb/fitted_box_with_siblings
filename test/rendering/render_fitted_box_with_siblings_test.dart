@@ -2,6 +2,7 @@ import 'package:fitted_box_with_siblings/fitted_box_with_siblings.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../test_rects_delegate.dart';
 import 'rendering_tester.dart';
 
 void main() {
@@ -10,9 +11,11 @@ void main() {
   test('RenderFittedBoxWithSiblings handles applying paint transform and '
       'hit-testing with empty size', () {
     final fittedBox = RenderFittedBoxWithSiblings(
-      computeRects: (constraints, boxSize) => [
-        Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-      ],
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+      ),
       children: <RenderBox>[
         RenderCustomPaint(painter: TestCallbackPainter(onPaint: () {})),
       ],
@@ -34,9 +37,11 @@ void main() {
     bool painted;
     RenderFittedBoxWithSiblings makeFittedBox(Size size) {
       return RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          ],
+        ),
         children: <RenderBox>[
           RenderCustomPaint(
             preferredSize: size,
@@ -72,14 +77,67 @@ void main() {
     expect(painted, equals(false));
   });
 
+  test('RenderFittedBoxWithSiblings dry layout throws when computeRects '
+      'returns too few rects', () {
+    final fittedBox = RenderFittedBoxWithSiblings(
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [
+          // 1 rect, but 2 children.
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+      ),
+      children: <RenderBox>[
+        RenderCustomPaint(painter: TestCallbackPainter(onPaint: () {})),
+        RenderCustomPaint(painter: TestCallbackPainter(onPaint: () {})),
+      ],
+    );
+
+    // Dry layout must report the rect count mismatch just like real layout,
+    // rather than silently sizing the extra sibling at zero.
+    expect(
+      () => fittedBox.getDryLayout(BoxConstraints.tight(const Size(200, 200))),
+      throwsFlutterError,
+    );
+  });
+
+  test('RenderFittedBoxWithSiblings dry baseline matches actual baseline', () {
+    // The first child (100x50) has no baseline. The sibling reports a
+    // baseline 10.0 below its top and is placed at a rect whose top (30.0)
+    // differs from where Stack-style alignment would put it, so a dry
+    // baseline computed with Stack logic will not match the actual baseline.
+    final fittedBox = RenderFittedBoxWithSiblings(
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [
+          const Rect.fromLTWH(0, 0, 100, 100),
+          const Rect.fromLTWH(20, 30, 50, 20),
+        ],
+      ),
+      children: <RenderBox>[
+        RenderConstrainedBox(
+          additionalConstraints: BoxConstraints.tight(const Size(100, 50)),
+        ),
+        _FixedBaselineBox(),
+      ],
+    );
+
+    final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+    layout(probe, constraints: BoxConstraints.tight(const Size(100, 100)));
+
+    // The sibling's rect top is 30.0 and its baseline is 10.0 below that.
+    expect(probe.actualBaseline, equals(40.0));
+    expect(probe.dryBaseline, equals(probe.actualBaseline));
+  });
+
   void testFittedBoxWithClipRectLayer() {
     _testLayerReuse<ClipRectLayer>(
       RenderFittedBoxWithSiblings(
         fit: BoxFit.cover,
         clipBehavior: Clip.hardEdge,
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          ],
+        ),
         children: <RenderBox>[
           // Inject opacity under the clip to force compositing.
           RenderRepaintBoundary(
@@ -94,9 +152,11 @@ void main() {
     _testLayerReuse<TransformLayer>(
       RenderFittedBoxWithSiblings(
         fit: BoxFit.fill,
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          ],
+        ),
         children: <RenderBox>[
           // Inject opacity under the clip to force compositing.
           RenderRepaintBoundary(child: RenderSizedBox(const Size(1, 1))),
@@ -136,18 +196,32 @@ void main() {
         case Clip.antiAlias:
         case Clip.antiAliasWithSaveLayer:
           box = RenderFittedBoxWithSiblings(
-            computeRects: (constraints, boxSize) => [
-              Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-            ],
+            delegate: TestRectsDelegate(
+              (constraints, boxSize) => [
+                Rect.fromLTWH(
+                  0,
+                  0,
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                ),
+              ],
+            ),
             children: <RenderBox>[box200x200],
             fit: BoxFit.none,
             clipBehavior: clip!,
           );
         case null:
           box = RenderFittedBoxWithSiblings(
-            computeRects: (constraints, boxSize) => [
-              Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-            ],
+            delegate: TestRectsDelegate(
+              (constraints, boxSize) => [
+                Rect.fromLTWH(
+                  0,
+                  0,
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                ),
+              ],
+            ),
             children: <RenderBox>[box200x200],
             fit: BoxFit.none,
           );
@@ -181,12 +255,12 @@ void main() {
       );
 
       final RenderBox stack = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) {
+        delegate: TestRectsDelegate((constraints, boxSize) {
           return [
             const Rect.fromLTWH(0, 0, 100.0, 100.0),
             const Rect.fromLTWH(0, 0, 100.0, 100.0),
           ];
-        },
+        }),
         textDirection: TextDirection.ltr,
         children: <RenderBox>[red, green],
       );
@@ -211,7 +285,7 @@ void main() {
 
   test('RenderFittedBoxWithSiblings can layout with no children', () {
     final RenderBox stack = RenderFittedBoxWithSiblings(
-      computeRects: (constraints, boxSize) => [],
+      delegate: TestRectsDelegate((constraints, boxSize) => []),
       textDirection: TextDirection.ltr,
       children: <RenderBox>[],
     );
@@ -229,7 +303,7 @@ void main() {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: <RenderBox>[
         RenderFittedBoxWithSiblings(
-          computeRects: (_, _) => [],
+          delegate: TestRectsDelegate((_, _) => []),
           textDirection: TextDirection.ltr,
           children: <RenderBox>[],
         ),
@@ -260,11 +334,13 @@ void main() {
       );
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          const Rect.fromLTWH(0, 0, 200, 150),
-          const Rect.fromLTWH(10, 20, 120, 45),
-          const Rect.fromLTWH(200, 100, 80, 60),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            const Rect.fromLTWH(0, 0, 200, 150),
+            const Rect.fromLTWH(10, 20, 120, 45),
+            const Rect.fromLTWH(200, 100, 80, 60),
+          ],
+        ),
         children: <RenderBox>[
           RenderSizedBox(const Size(100, 50)),
           sibling1,
@@ -291,11 +367,13 @@ void main() {
       );
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          const Rect.fromLTWH(0, 0, 200, 150),
-          const Rect.fromLTWH(10, 20, 120, 45),
-          const Rect.fromLTWH(200, 100, 80, 60),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            const Rect.fromLTWH(0, 0, 200, 150),
+            const Rect.fromLTWH(10, 20, 120, 45),
+            const Rect.fromLTWH(200, 100, 80, 60),
+          ],
+        ),
         children: <RenderBox>[
           RenderSizedBox(const Size(100, 50)),
           sibling1,
@@ -322,10 +400,12 @@ void main() {
       var siblingPainted = false;
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          const Rect.fromLTWH(0, 0, 200, 150),
-          const Rect.fromLTWH(10, 20, 100, 50),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            const Rect.fromLTWH(0, 0, 200, 150),
+            const Rect.fromLTWH(10, 20, 100, 50),
+          ],
+        ),
         children: <RenderBox>[
           RenderCustomPaint(
             preferredSize: const Size(100, 50),
@@ -353,10 +433,12 @@ void main() {
       var siblingPainted = false;
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-          const Rect.fromLTWH(10, 10, 100, 50),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+            const Rect.fromLTWH(10, 10, 100, 50),
+          ],
+        ),
         children: <RenderBox>[
           // First child with empty preferred size.
           RenderCustomPaint(
@@ -386,10 +468,12 @@ void main() {
       final sibling = RenderSizedBox(const Size(100, 50));
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          const Rect.fromLTWH(0, 0, 200, 150),
-          const Rect.fromLTWH(10, 20, 100, 50),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            const Rect.fromLTWH(0, 0, 200, 150),
+            const Rect.fromLTWH(10, 20, 100, 50),
+          ],
+        ),
         children: <RenderBox>[RenderSizedBox(const Size(100, 50)), sibling],
       );
 
@@ -413,9 +497,11 @@ void main() {
       final fittedChild = RenderSizedBox(const Size(100, 50));
 
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          ],
+        ),
         children: <RenderBox>[fittedChild],
       );
 
@@ -451,9 +537,11 @@ void main() {
     test('setting fit to scaleDown triggers layout', () {
       final fittedBox = RenderFittedBoxWithSiblings(
         fit: BoxFit.contain,
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+          ],
+        ),
         children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
       );
 
@@ -468,11 +556,9 @@ void main() {
       expect(fittedBox.debugNeedsLayout, isTrue);
     });
 
-    test('setting computeRects triggers layout', () {
+    test('setting an equivalent delegate does not trigger layout', () {
       final fittedBox = RenderFittedBoxWithSiblings(
-        computeRects: (constraints, boxSize) => [
-          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
-        ],
+        delegate: const _FullSizeRectsDelegate(),
         children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
       );
 
@@ -481,12 +567,109 @@ void main() {
         constraints: BoxConstraints.tight(const Size(200, 200)),
       );
 
-      fittedBox.computeRects = (constraints, boxSize) => [
-        const Rect.fromLTWH(0, 0, 100, 100),
-      ];
+      // Same instance: no relayout.
+      final sameDelegate = fittedBox.delegate;
+      fittedBox.delegate = sameDelegate;
+      expect(fittedBox.debugNeedsLayout, isFalse);
+
+      // Same runtimeType and shouldRelayout returns false: no relayout.
+      fittedBox.delegate = const _FullSizeRectsDelegate();
+      expect(fittedBox.debugNeedsLayout, isFalse);
+    });
+
+    test('setting a delegate whose shouldRelayout returns true triggers '
+        'layout', () {
+      final fittedBox = RenderFittedBoxWithSiblings(
+        delegate: const _FullSizeRectsDelegate(),
+        children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(200, 200)),
+      );
+
+      fittedBox.delegate = const _FullSizeRectsDelegate(relayout: true);
+      expect(fittedBox.debugNeedsLayout, isTrue);
+    });
+
+    test('setting a delegate of a different type triggers layout', () {
+      final fittedBox = RenderFittedBoxWithSiblings(
+        delegate: const _FullSizeRectsDelegate(),
+        children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(200, 200)),
+      );
+
+      // A different runtimeType relayouts even though its shouldRelayout
+      // returns false.
+      fittedBox.delegate = TestRectsDelegate(
+        (constraints, boxSize) => [
+          Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+        ],
+      );
       expect(fittedBox.debugNeedsLayout, isTrue);
     });
   });
+}
+
+// A delegate that returns a single full-size rect and reports [relayout]
+// from shouldRelayout.
+class _FullSizeRectsDelegate extends FittedBoxWithSiblingsDelegate {
+  const _FullSizeRectsDelegate({this.relayout = false});
+
+  final bool relayout;
+
+  @override
+  List<Rect> computeRects(BoxConstraints constraints, Size boxSize) => [
+    Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+  ];
+
+  @override
+  bool shouldRelayout(_FullSizeRectsDelegate oldDelegate) => relayout;
+}
+
+// A box that sizes to its constraints and reports a fixed baseline 10.0
+// below its top edge.
+class _FixedBaselineBox extends RenderBox {
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) =>
+      constraints.smallest;
+
+  @override
+  void performLayout() {
+    size = constraints.smallest;
+  }
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) => 10.0;
+
+  @override
+  double? computeDryBaseline(
+    covariant BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => 10.0;
+}
+
+// A proxy that records its child's dry and actual baselines during layout,
+// where both queries are legal.
+class _BaselineProbe extends RenderProxyBox {
+  _BaselineProbe(this.baseline, RenderBox child) : super(child);
+
+  final TextBaseline baseline;
+  double? dryBaseline;
+  double? actualBaseline;
+
+  @override
+  void performLayout() {
+    dryBaseline = child!.getDryBaseline(constraints, baseline);
+    child!.layout(constraints, parentUsesSize: true);
+    size = child!.size;
+    actualBaseline = child!.getDistanceToBaseline(baseline, onlyReal: true);
+  }
 }
 
 // Forces two frames and checks that:

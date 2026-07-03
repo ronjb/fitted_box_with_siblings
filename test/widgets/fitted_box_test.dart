@@ -11,6 +11,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../test_rects_delegate.dart';
+
 void main() {
   testWidgets('Can size according to aspect ratio', (
     WidgetTester tester,
@@ -24,13 +26,13 @@ void main() {
           width: 200.0,
           child: FittedBoxWithSiblings(
             key: outside,
-            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
-            computeRects: (c, boxSize) {
+            delegate: TestRectsDelegate((c, boxSize) {
               final aspectRatio = boxSize.width / boxSize.height;
               return [
                 Rect.fromLTWH(0, 0, c.maxWidth, c.maxWidth / aspectRatio),
               ];
-            },
+            }),
+            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
           ),
         ),
       ),
@@ -66,10 +68,10 @@ void main() {
           height: 200.0,
           child: FittedBoxWithSiblings(
             key: outside,
-            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
-            computeRects: (c, boxSize) {
+            delegate: TestRectsDelegate((c, boxSize) {
               return [Rect.fromLTWH(0, 0, c.maxWidth, c.maxHeight)];
-            },
+            }),
+            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
           ),
         ),
       ),
@@ -105,10 +107,10 @@ void main() {
           child: FittedBoxWithSiblings(
             key: outside,
             fit: BoxFit.cover,
-            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
-            computeRects: (c, boxSize) {
+            delegate: TestRectsDelegate((c, boxSize) {
               return [Rect.fromLTWH(0, 0, c.maxWidth, c.maxHeight)];
-            },
+            }),
+            children: [SizedBox(key: inside, width: 100.0, height: 50.0)],
           ),
         ),
       ),
@@ -139,7 +141,7 @@ void main() {
         child: FittedBoxWithSiblings(
           key: key,
           fit: BoxFit.cover,
-          computeRects: (c, boxSize) => [],
+          delegate: TestRectsDelegate((c, boxSize) => []),
         ),
       ),
     );

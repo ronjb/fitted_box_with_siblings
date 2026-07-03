@@ -66,22 +66,7 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Container(
         color: Colors.orange,
         child: FittedBoxWithSiblings(
-          computeRects: (constraints, boxSize) {
-            if (kDebugMode) {
-              print('constraints=$constraints, boxSize=$boxSize');
-            }
-            final centerX = constraints.maxWidth / 2;
-            return [
-              Rect.fromLTWH(
-                0,
-                100,
-                constraints.maxWidth,
-                constraints.maxHeight - 100,
-              ),
-              Rect.fromLTWH(0, 0, centerX, 100),
-              Rect.fromLTWH(centerX, 0, centerX, 100),
-            ];
-          },
+          delegate: const _HeaderAndBoxDelegate(),
           children: [
             const Text('You have pushed the button\nthis many times:'),
             Container(
@@ -114,4 +99,30 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
   }
+}
+
+/// Places two header rects side by side across the top 100 pixels, with the
+/// fitted box filling the rest.
+///
+/// The rects depend only on the constraints, so [shouldRelayout] returns
+/// false and rebuilding with a new instance (e.g. every timer tick) does not
+/// relayout.
+class _HeaderAndBoxDelegate extends FittedBoxWithSiblingsDelegate {
+  const _HeaderAndBoxDelegate();
+
+  @override
+  List<Rect> computeRects(BoxConstraints constraints, Size boxSize) {
+    if (kDebugMode) {
+      print('constraints=$constraints, boxSize=$boxSize');
+    }
+    final centerX = constraints.maxWidth / 2;
+    return [
+      Rect.fromLTWH(0, 100, constraints.maxWidth, constraints.maxHeight - 100),
+      Rect.fromLTWH(0, 0, centerX, 100),
+      Rect.fromLTWH(centerX, 0, centerX, 100),
+    ];
+  }
+
+  @override
+  bool shouldRelayout(_HeaderAndBoxDelegate oldDelegate) => false;
 }
