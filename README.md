@@ -81,6 +81,7 @@ If your rects depend on state outside the delegate, pass that state in through t
 | `alignment` | `AlignmentGeometry` | `Alignment.center` | How to align the first child within its rect. |
 | `clipBehavior` | `Clip` | `Clip.none` | Whether and how to clip children that overflow. |
 | `stackFit` | `StackFit` | `StackFit.loose` | How to transform the constraints passed to `computeRects`. |
+| `expandBox` | `Axis?` | `null` | After `computeRects`, grows the first child along this axis to fill its rect at the scale the `fit` applies, so a child that can grow, such as a `Column` with `MainAxisSize.max`, fills its rect. |
 | `delegate` | `FittedBoxWithSiblingsDelegate` | required | Delegate whose `computeRects` method returns rects for each child. |
 
 ## Add an Issue for Missing Features

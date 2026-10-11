@@ -1,3 +1,9 @@
+## 2.1.0
+
+* Added `expandBox`. When set to an `Axis`, the first child (the "box") is laid out again after `computeRects`, grown along that axis to fill its rect at the scale the `fit` applies, so a box that can grow, such as a `Column` with `MainAxisSize.max` and `MainAxisAlignment.spaceEvenly`, fills its rect instead of leaving space beside it. It has no effect when the `fit` already fills the rect along that axis, such as `BoxFit.cover`. `computeRects` still receives the box's natural size, and the rects are not recomputed.
+* Fix: the baseline of the first child (the "box") is now reported where it is painted, scaled and positioned by the `fit`, so the box lines up with its neighbors in a baseline-aligned `Row`. Previously it was reported at the box's unscaled size, which was only correct at a scale of 1. A first child that paints nothing, because its size or rect is empty, no longer reports a baseline.
+* Fix: a first child whose rect is empty no longer fails a debug assertion when painted or hit-tested. Like a first child with an empty size, it is not painted.
+
 ## 2.0.0
 
 * **BREAKING**: Replaced the `computeRects` callback with a `delegate` of type `FittedBoxWithSiblingsDelegate`, which has a `computeRects` method and a `shouldRelayout` method. Rebuilding with an equivalent delegate (same `runtimeType`, `shouldRelayout` returns false) no longer triggers an unnecessary relayout on every rebuild. To migrate, move your callback body into a delegate subclass:

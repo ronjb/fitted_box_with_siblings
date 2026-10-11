@@ -33,6 +33,31 @@ void main() {
     );
   });
 
+  test('RenderFittedBoxWithSiblings handles applying paint transform and '
+      'hit-testing with an empty rect', () {
+    // The first child has a size, but its rect is empty, so it is scaled to
+    // nothing.
+    final fittedBox = RenderFittedBoxWithSiblings(
+      delegate: TestRectsDelegate((constraints, boxSize) => [Rect.zero]),
+      children: <RenderBox>[RenderSizedBox(const Size(100, 50))],
+    );
+
+    layout(
+      fittedBox,
+      constraints: BoxConstraints.tight(const Size(200, 200)),
+      phase: EnginePhase.flushSemantics,
+    );
+    final transform = Matrix4.identity();
+    fittedBox.applyPaintTransform(fittedBox.firstChild!, transform);
+    expect(transform, Matrix4.zero());
+
+    final hitTestResult = BoxHitTestResult();
+    expect(
+      fittedBox.hitTestChildren(hitTestResult, position: Offset.zero),
+      isFalse,
+    );
+  });
+
   test('RenderFittedBoxWithSiblings does not paint with empty sizes', () {
     bool painted;
     RenderFittedBoxWithSiblings makeFittedBox(Size size) {
@@ -126,6 +151,147 @@ void main() {
     // The sibling's rect top is 30.0 and its baseline is 10.0 below that.
     expect(probe.actualBaseline, equals(40.0));
     expect(probe.dryBaseline, equals(probe.actualBaseline));
+  });
+
+  test('RenderFittedBoxWithSiblings dry baseline matches actual baseline '
+      'with expandBox', () {
+    // The first child is a column of two 100x10 rows, the second of which
+    // reports a baseline. With expandBox, the column grows from 100x20 to
+    // 100x200 and spreads its rows out, so a dry baseline computed from the
+    // column's own size will not match the actual baseline. The second row's
+    // baseline is 140.0 below the top of the column, which is painted at a
+    // scale of 2.
+    final fittedBox = RenderFittedBoxWithSiblings(
+      expandBox: Axis.vertical,
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [const Rect.fromLTWH(0, 0, 200, 400)],
+      ),
+      children: <RenderBox>[
+        RenderFlex(
+          direction: Axis.vertical,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <RenderBox>[
+            RenderConstrainedBox(
+              additionalConstraints: BoxConstraints.tight(const Size(100, 10)),
+            ),
+            RenderConstrainedBox(
+              additionalConstraints: BoxConstraints.tight(const Size(100, 10)),
+              child: _FixedBaselineBox(),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+    layout(probe, constraints: BoxConstraints.tight(const Size(200, 400)));
+
+    expect(fittedBox.firstChild!.size, equals(const Size(100, 200)));
+    expect(probe.actualBaseline, equals(280.0));
+    expect(probe.dryBaseline, equals(probe.actualBaseline));
+  });
+
+  test('RenderFittedBoxWithSiblings reports the baseline of a scaled first '
+      'child where it is painted', () {
+    // BoxFit.contain scales the 100x50 first child by 2 to 200x100, centered
+    // in its 200x200 rect, so its baseline 10.0 below its top is painted at
+    // 50.0 + 10.0 * 2.
+    final fittedBox = RenderFittedBoxWithSiblings(
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [const Rect.fromLTWH(0, 0, 200, 200)],
+      ),
+      children: <RenderBox>[
+        RenderConstrainedBox(
+          additionalConstraints: BoxConstraints.tight(const Size(100, 50)),
+          child: _FixedBaselineBox(),
+        ),
+      ],
+    );
+
+    final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+    layout(probe, constraints: BoxConstraints.tight(const Size(200, 200)));
+
+    expect(probe.actualBaseline, equals(70.0));
+    expect(probe.dryBaseline, equals(probe.actualBaseline));
+  });
+
+  test('RenderFittedBoxWithSiblings reports the baseline of a cropped first '
+      'child where it is painted', () {
+    // BoxFit.cover scales the 50x100 first child by 4 to cover its 200x200
+    // rect, cropping 25.0 off its top, so its baseline 40.0 below its top is
+    // painted at (40.0 - 25.0) * 4.
+    final fittedBox = RenderFittedBoxWithSiblings(
+      fit: BoxFit.cover,
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [const Rect.fromLTWH(0, 0, 200, 200)],
+      ),
+      children: <RenderBox>[
+        RenderConstrainedBox(
+          additionalConstraints: BoxConstraints.tight(const Size(50, 100)),
+          child: RenderPadding(
+            padding: const EdgeInsets.only(top: 30),
+            child: _FixedBaselineBox(),
+          ),
+        ),
+      ],
+    );
+
+    final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+    layout(probe, constraints: BoxConstraints.tight(const Size(200, 200)));
+
+    expect(probe.actualBaseline, equals(60.0));
+    expect(probe.dryBaseline, equals(probe.actualBaseline));
+  });
+
+  test('RenderFittedBoxWithSiblings updates the baseline when fit changes', () {
+    final fittedBox = RenderFittedBoxWithSiblings(
+      delegate: TestRectsDelegate(
+        (constraints, boxSize) => [const Rect.fromLTWH(0, 0, 200, 200)],
+      ),
+      children: <RenderBox>[
+        RenderConstrainedBox(
+          additionalConstraints: BoxConstraints.tight(const Size(100, 50)),
+          child: _FixedBaselineBox(),
+        ),
+      ],
+    );
+
+    final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+    layout(probe, constraints: BoxConstraints.tight(const Size(200, 200)));
+    expect(probe.actualBaseline, equals(70.0));
+
+    // BoxFit.fill stretches the 100x50 first child by 4 vertically to fill
+    // its 200x200 rect, so its baseline 10.0 below its top is painted at
+    // 10.0 * 4.
+    fittedBox.fit = BoxFit.fill;
+    pumpFrame();
+    expect(probe.actualBaseline, equals(40.0));
+  });
+
+  test('RenderFittedBoxWithSiblings reports no baseline for a first child '
+      'that paints nothing', () {
+    // A first child with an empty size, or one scaled to nothing by an empty
+    // rect, paints nothing, so it has no baseline.
+    for (final (childSize, rect) in [
+      (Size.zero, const Rect.fromLTWH(0, 0, 200, 200)),
+      (const Size(100, 50), Rect.zero),
+    ]) {
+      final fittedBox = RenderFittedBoxWithSiblings(
+        delegate: TestRectsDelegate((constraints, boxSize) => [rect]),
+        children: <RenderBox>[
+          RenderConstrainedBox(
+            additionalConstraints: BoxConstraints.tight(childSize),
+            child: _FixedBaselineBox(),
+          ),
+        ],
+      );
+
+      final probe = _BaselineProbe(TextBaseline.alphabetic, fittedBox);
+      layout(probe, constraints: BoxConstraints.tight(const Size(200, 200)));
+
+      expect(probe.actualBaseline, isNull);
+      expect(probe.dryBaseline, isNull);
+    }
   });
 
   void testFittedBoxWithClipRectLayer() {
@@ -461,6 +627,39 @@ void main() {
       // firstChild.size.isEmpty, skipping siblings.
       expect(siblingPainted, isTrue);
     });
+
+    test('siblings paint when fitted child has an empty rect', () {
+      var boxPainted = false;
+      var siblingPainted = false;
+
+      final fittedBox = RenderFittedBoxWithSiblings(
+        delegate: TestRectsDelegate(
+          (constraints, boxSize) => [
+            Rect.zero,
+            const Rect.fromLTWH(10, 10, 100, 50),
+          ],
+        ),
+        children: <RenderBox>[
+          // First child with a size, scaled to nothing by its empty rect.
+          RenderCustomPaint(
+            preferredSize: const Size(100, 50),
+            painter: TestCallbackPainter(onPaint: () => boxPainted = true),
+          ),
+          RenderCustomPaint(
+            painter: TestCallbackPainter(onPaint: () => siblingPainted = true),
+          ),
+        ],
+      );
+
+      layout(
+        fittedBox,
+        constraints: BoxConstraints.tight(const Size(400, 300)),
+        phase: EnginePhase.paint,
+      );
+
+      expect(boxPainted, isFalse);
+      expect(siblingPainted, isTrue);
+    });
   });
 
   group('Hit testing', () {
@@ -534,7 +733,7 @@ void main() {
   });
 
   group('Property setters', () {
-    test('setting fit to scaleDown triggers layout', () {
+    test('setting fit triggers layout', () {
       final fittedBox = RenderFittedBoxWithSiblings(
         fit: BoxFit.contain,
         delegate: TestRectsDelegate(
@@ -550,9 +749,9 @@ void main() {
         constraints: BoxConstraints.tight(const Size(200, 200)),
       );
 
-      // Changing to scaleDown should trigger layout (since scaleDown affects
-      // layout).
-      fittedBox.fit = BoxFit.scaleDown;
+      // Any change of fit triggers layout, since the fit affects the baseline
+      // of the first child.
+      fittedBox.fit = BoxFit.cover;
       expect(fittedBox.debugNeedsLayout, isTrue);
     });
 
@@ -656,6 +855,11 @@ class _FixedBaselineBox extends RenderBox {
 
 // A proxy that records its child's dry and actual baselines during layout,
 // where both queries are legal.
+//
+// Flutter caches dry and actual baselines together, keyed by constraints, so
+// the actual baseline is read first. Reading the dry baseline then returns
+// the cached actual baseline, and in debug mode getDryBaseline asserts that a
+// freshly computed dry baseline matches it.
 class _BaselineProbe extends RenderProxyBox {
   _BaselineProbe(this.baseline, RenderBox child) : super(child);
 
@@ -665,10 +869,10 @@ class _BaselineProbe extends RenderProxyBox {
 
   @override
   void performLayout() {
-    dryBaseline = child!.getDryBaseline(constraints, baseline);
     child!.layout(constraints, parentUsesSize: true);
     size = child!.size;
     actualBaseline = child!.getDistanceToBaseline(baseline, onlyReal: true);
+    dryBaseline = child!.getDryBaseline(constraints, baseline);
   }
 }
 

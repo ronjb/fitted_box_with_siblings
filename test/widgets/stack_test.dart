@@ -4,7 +4,7 @@
 
 //
 // ignore_for_file: avoid_types_on_closure_parameters
-// ignore_for_file: omit_local_variable_types, cascade_invocations
+// ignore_for_file: omit_local_variable_types
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';

@@ -942,6 +942,291 @@ void main() {
       expect(computeCount[0], equals(1));
     });
   });
+
+  group('expandBox', () {
+    // A box whose natural size is 100x20, two 100x10 rows, which spreads its
+    // rows out when it is given more height.
+    final first = UniqueKey();
+    final second = UniqueKey();
+    Widget column() => Column(
+      key: const Key('box'),
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        SizedBox(key: first, width: 100, height: 10),
+        SizedBox(key: second, width: 100, height: 10),
+      ],
+    );
+
+    // A box whose natural size is 20x50, two 10x50 columns, which spreads its
+    // columns out when it is given more width.
+    Widget row() => const Row(
+      key: Key('box'),
+      textDirection: TextDirection.ltr,
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        SizedBox(width: 10, height: 50),
+        SizedBox(width: 10, height: 50),
+      ],
+    );
+
+    Widget build({
+      required double width,
+      required double height,
+      required Widget box,
+      BoxFit fit = BoxFit.contain,
+      Axis? expandBox,
+      List<Size>? boxSizes,
+    }) => Center(
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: FittedBoxWithSiblings(
+          fit: fit,
+          expandBox: expandBox,
+          delegate: TestRectsDelegate((constraints, boxSize) {
+            boxSizes?.add(boxSize);
+            return [
+              Rect.fromLTWH(0, 0, constraints.maxWidth, constraints.maxHeight),
+            ];
+          }),
+          children: [box],
+        ),
+      ),
+    );
+
+    Size sizeOf(WidgetTester tester, Key key) =>
+        tester.renderObject<RenderBox>(find.byKey(key)).size;
+
+    double topOf(WidgetTester tester, Key key) => tester
+        .renderObject<RenderBox>(find.byKey(key))
+        .localToGlobal(Offset.zero)
+        .dy;
+
+    testWidgets('null keeps the box at its own size', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(build(width: 200, height: 400, box: column()));
+
+      expect(sizeOf(tester, const Key('box')), const Size(100, 20));
+    });
+
+    testWidgets('vertical fills the height of the rect', (
+      WidgetTester tester,
+    ) async {
+      final boxSizes = <Size>[];
+      await tester.pumpWidget(
+        build(
+          width: 200,
+          height: 400,
+          box: column(),
+          expandBox: Axis.vertical,
+          boxSizes: boxSizes,
+        ),
+      );
+
+      // The delegate sees the box's own size, and the box then fills its
+      // 200x400 rect at a scale of 2.
+      expect(boxSizes, [const Size(100, 20)]);
+      expect(sizeOf(tester, const Key('box')), const Size(100, 200));
+
+      // 180 spare pixels in the box make three gaps of 60, scaled by 2, below
+      // the top of the 400 high parent centered in the 600 high test window.
+      expect(topOf(tester, first), 100 + 60 * 2);
+      expect(topOf(tester, second), 100 + (60 + 10 + 60) * 2);
+    });
+
+    testWidgets('horizontal fills the width of the rect', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        build(width: 400, height: 100, box: row(), expandBox: Axis.horizontal),
+      );
+
+      expect(sizeOf(tester, const Key('box')), const Size(200, 50));
+    });
+
+    testWidgets('a rect relatively wider than the box leaves it as is', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        build(width: 400, height: 40, box: column(), expandBox: Axis.vertical),
+      );
+
+      expect(sizeOf(tester, const Key('box')), const Size(100, 20));
+    });
+
+    for (final fit in [BoxFit.scaleDown, BoxFit.none]) {
+      testWidgets('vertical with $fit fills the height of the rect', (
+        WidgetTester tester,
+      ) async {
+        await tester.pumpWidget(
+          build(
+            width: 200,
+            height: 400,
+            box: column(),
+            fit: fit,
+            expandBox: Axis.vertical,
+          ),
+        );
+
+        // The fit leaves the box at a scale of 1, so it grows to the full
+        // height of its rect.
+        expect(sizeOf(tester, const Key('box')), const Size(100, 400));
+      });
+    }
+
+    testWidgets('horizontal with BoxFit.scaleDown fills the width of the '
+        'rect', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        build(
+          width: 400,
+          height: 100,
+          box: row(),
+          fit: BoxFit.scaleDown,
+          expandBox: Axis.horizontal,
+        ),
+      );
+
+      // The fit leaves the box at a scale of 1, so it grows to the full width
+      // of its rect.
+      expect(sizeOf(tester, const Key('box')), const Size(400, 50));
+    });
+
+    for (final fit in [BoxFit.cover, BoxFit.fill, BoxFit.fitHeight]) {
+      testWidgets('vertical with $fit leaves the box as is', (
+        WidgetTester tester,
+      ) async {
+        await tester.pumpWidget(
+          build(
+            width: 200,
+            height: 400,
+            box: column(),
+            fit: fit,
+            expandBox: Axis.vertical,
+          ),
+        );
+
+        // The fit already scales the box to the full height of its rect.
+        expect(sizeOf(tester, const Key('box')), const Size(100, 20));
+      });
+    }
+
+    testWidgets('vertical keeps the width of the box', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        build(
+          width: 200,
+          height: 400,
+          // A box that is 100x20 on its own, but wider when its height is
+          // bounded.
+          box: LayoutBuilder(
+            key: const Key('box'),
+            builder: (context, constraints) => SizedBox(
+              width: constraints.hasBoundedHeight ? 150 : 100,
+              height: 20,
+            ),
+          ),
+          expandBox: Axis.vertical,
+        ),
+      );
+
+      expect(sizeOf(tester, const Key('box')), const Size(100, 200));
+    });
+
+    testWidgets('horizontal keeps the height of the box', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        build(
+          width: 400,
+          height: 100,
+          // A box that is 20x50 on its own, but taller when its width is
+          // bounded.
+          box: LayoutBuilder(
+            key: const Key('box'),
+            builder: (context, constraints) => SizedBox(
+              width: 20,
+              height: constraints.hasBoundedWidth ? 75 : 50,
+            ),
+          ),
+          expandBox: Axis.horizontal,
+        ),
+      );
+
+      expect(sizeOf(tester, const Key('box')), const Size(200, 50));
+    });
+
+    testWidgets('changing expandBox relayouts the box', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(build(width: 200, height: 400, box: column()));
+      expect(sizeOf(tester, const Key('box')), const Size(100, 20));
+
+      await tester.pumpWidget(
+        build(width: 200, height: 400, box: column(), expandBox: Axis.vertical),
+      );
+      expect(sizeOf(tester, const Key('box')), const Size(100, 200));
+    });
+
+    testWidgets('changing fit relayouts the box', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        build(width: 200, height: 400, box: column(), expandBox: Axis.vertical),
+      );
+      expect(sizeOf(tester, const Key('box')), const Size(100, 200));
+
+      await tester.pumpWidget(
+        build(
+          width: 200,
+          height: 400,
+          box: column(),
+          fit: BoxFit.cover,
+          expandBox: Axis.vertical,
+        ),
+      );
+      expect(sizeOf(tester, const Key('box')), const Size(100, 20));
+    });
+
+    testWidgets('a change inside the box recomputes the rects', (
+      WidgetTester tester,
+    ) async {
+      // Only the first row rebuilds when its width changes, so the
+      // FittedBoxWithSiblings is not rebuilt, and only a relayout propagating
+      // up from the box can recompute the rects.
+      final rowWidth = ValueNotifier<double>(100);
+      addTearDown(rowWidth.dispose);
+      final boxSizes = <Size>[];
+      await tester.pumpWidget(
+        build(
+          width: 200,
+          height: 400,
+          box: Column(
+            key: const Key('box'),
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ValueListenableBuilder<double>(
+                valueListenable: rowWidth,
+                builder: (context, value, child) =>
+                    SizedBox(width: value, height: 10),
+              ),
+              const SizedBox(width: 100, height: 10),
+            ],
+          ),
+          expandBox: Axis.vertical,
+          boxSizes: boxSizes,
+        ),
+      );
+      expect(sizeOf(tester, const Key('box')), const Size(100, 200));
+
+      rowWidth.value = 200;
+      await tester.pump();
+
+      // The delegate sees the box's new size, and the box then fills its
+      // 200x400 rect at a scale of 1.
+      expect(boxSizes, [const Size(100, 20), const Size(200, 20)]);
+      expect(sizeOf(tester, const Key('box')), const Size(200, 400));
+    });
+  });
 }
 
 // A delegate that counts computeRects calls in the shared [computeCount]

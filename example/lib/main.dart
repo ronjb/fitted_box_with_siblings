@@ -34,6 +34,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  bool _expandBox = false;
   Timer? _timer;
 
   @override
@@ -62,13 +63,30 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
+        actions: [
+          const Text('Expand box'),
+          Switch(
+            value: _expandBox,
+            onChanged: (value) => setState(() => _expandBox = value),
+          ),
+        ],
       ),
       body: Container(
         color: Colors.orange,
         child: FittedBoxWithSiblings(
+          // When on, the column grows to fill the height of its rect,
+          // spreading its lines out, instead of leaving space above and below
+          // it.
+          expandBox: _expandBox ? Axis.vertical : null,
           delegate: const _HeaderAndBoxDelegate(),
           children: [
-            const Text('You have pushed the button\nthis many times:'),
+            const Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Text('You have pushed the button'),
+                Text('this many times:'),
+              ],
+            ),
             Container(
               width: double.infinity,
               height: double.infinity,

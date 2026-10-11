@@ -54,12 +54,14 @@ class RenderFittedBoxWithSiblings extends RenderBox
     TextDirection? textDirection,
     StackFit stackFit = StackFit.loose,
     Clip clipBehavior = Clip.none,
+    Axis? expandBox,
     required FittedBoxWithSiblingsDelegate delegate,
   }) : _fit = fit,
        _alignment = alignment,
        _textDirection = textDirection,
        _stackFit = stackFit,
        _clipBehavior = clipBehavior,
+       _expandBox = expandBox,
        _delegate = delegate {
     addAll(children);
   }
@@ -71,34 +73,17 @@ class RenderFittedBoxWithSiblings extends RenderBox
     }
   }
 
-  bool _fitAffectsLayout(BoxFit fit) {
-    switch (fit) {
-      case BoxFit.scaleDown:
-        return true;
-      case BoxFit.contain:
-      case BoxFit.cover:
-      case BoxFit.fill:
-      case BoxFit.fitHeight:
-      case BoxFit.fitWidth:
-      case BoxFit.none:
-        return false;
-    }
-  }
-
   BoxFit get fit => _fit;
   BoxFit _fit;
   set fit(BoxFit value) {
     if (_fit == value) {
       return;
     }
-    final lastFit = _fit;
+    // The fit affects the baseline of the first child, and with expandBox,
+    // its layout.
     _fit = value;
-    if (_fitAffectsLayout(lastFit) || _fitAffectsLayout(value)) {
-      markNeedsLayout();
-    } else {
-      _clearPaintData();
-      markNeedsPaint();
-    }
+    _clearPaintData();
+    markNeedsLayout();
   }
 
   Alignment get _resolvedAlignment => _resolvedAlignmentCache ??= alignment
@@ -148,6 +133,17 @@ class RenderFittedBoxWithSiblings extends RenderBox
       _clipBehavior = value;
       markNeedsPaint();
       markNeedsSemanticsUpdate();
+    }
+  }
+
+  /// See [FittedBoxWithSiblings.expandBox].
+  Axis? get expandBox => _expandBox;
+  Axis? _expandBox;
+  set expandBox(Axis? value) {
+    if (_expandBox != value) {
+      _expandBox = value;
+      _clearPaintData();
+      markNeedsLayout();
     }
   }
 
@@ -217,7 +213,26 @@ class RenderFittedBoxWithSiblings extends RenderBox
 
   @override
   double? computeDistanceToActualBaseline(TextBaseline baseline) {
-    return defaultComputeDistanceToHighestActualBaseline(baseline);
+    var baselineOffset = BaselineOffset.noBaseline;
+    var i = 0;
+    for (var child = firstChild; child != null; child = childAfter(child)) {
+      // The first child is painted fitted into its rect, and siblings are
+      // painted at the top left of their rect, which they fill. In release
+      // mode a missing rect falls back to Rect.zero, matching performLayout.
+      final rect = i < _rects.length ? _rects[i] : Rect.zero;
+      final childBaseline = child.getDistanceToActualBaseline(baseline);
+      if (childBaseline != null) {
+        baselineOffset = baselineOffset.minOf(
+          BaselineOffset(
+            i == 0
+                ? _boxBaseline(childBaseline, child.size, rect)
+                : childBaseline + rect.top,
+          ),
+        );
+      }
+      i++;
+    }
+    return baselineOffset.offset;
   }
 
   @override
@@ -231,36 +246,58 @@ class RenderFittedBoxWithSiblings extends RenderBox
     );
     _checkRectCount(result.rects);
 
-    final alignment = _resolvedAlignment;
     var baselineOffset = BaselineOffset.noBaseline;
     var i = 0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
-      // Mirror the constraints and offset that performLayout applies: the
-      // first child is laid out unconstrained, and siblings are laid out
-      // with constraints tight to their rect. For siblings the alongOffset
-      // term is always zero since their size equals the rect size. In
-      // release mode a missing rect falls back to Rect.zero, matching
-      // performLayout.
+      // Mirror computeDistanceToActualBaseline, with the constraints that
+      // performLayout applies: the first child is laid out with the box
+      // constraints, and siblings are laid out with constraints tight to
+      // their rect. In release mode a missing rect falls back to Rect.zero,
+      // matching performLayout.
       final rect = i < result.rects.length ? result.rects[i] : Rect.zero;
       final childConstraints = i == 0
-          ? const BoxConstraints()
+          ? result.boxConstraints
           : BoxConstraints.tight(rect.size);
       final childBaseline = child.getDryBaseline(childConstraints, baseline);
       if (childBaseline != null) {
-        final y =
-            alignment
-                .alongOffset(
-                  rect.size - child.getDryLayout(childConstraints) as Offset,
-                )
-                .dy +
-            rect.top;
         baselineOffset = baselineOffset.minOf(
-          BaselineOffset(childBaseline + y),
+          BaselineOffset(
+            i == 0
+                ? _boxBaseline(
+                    childBaseline,
+                    child.getDryLayout(childConstraints),
+                    rect,
+                  )
+                : childBaseline + rect.top,
+          ),
         );
       }
       i++;
     }
     return baselineOffset.offset;
+  }
+
+  /// The distance from the top of this render object to the baseline of the
+  /// first child (the "box"), [childBaseline] below the top of the box, as
+  /// the box of [childSize] is painted fitted into [boxRect], or null when
+  /// the box paints nothing.
+  double? _boxBaseline(double childBaseline, Size childSize, Rect boxRect) {
+    if (childSize.isEmpty || boxRect.isEmpty) return null;
+    final (:source, :destination) = _fitBox(childSize, boxRect);
+    return destination.top +
+        (childBaseline - source.top) * destination.height / source.height;
+  }
+
+  /// The part of the first child (the "box") of [childSize] that is painted,
+  /// and where in [boxRect] it is painted, according to [fit] and
+  /// [alignment].
+  ({Rect source, Rect destination}) _fitBox(Size childSize, Rect boxRect) {
+    final sizes = applyBoxFit(_fit, childSize, boxRect.size);
+    final alignment = _resolvedAlignment;
+    return (
+      source: alignment.inscribe(sizes.source, Offset.zero & childSize),
+      destination: alignment.inscribe(sizes.destination, boxRect),
+    );
   }
 
   @override
@@ -289,7 +326,6 @@ class RenderFittedBoxWithSiblings extends RenderBox
     // single descriptive error instead of cascading missing-size exceptions.
     _checkRectCount(_rects);
 
-    final resolvedAlignment = _resolvedAlignment;
     var child = firstChild;
     var i = 0;
     while (child != null) {
@@ -299,12 +335,13 @@ class RenderFittedBoxWithSiblings extends RenderBox
           'Positioned children are not supported in FittedBoxWithSiblings.',
         );
       } else {
-        // The rect count is validated by _checkRectCount above in debug
-        // mode; in release mode a missing rect falls back to Rect.zero.
+        // Siblings fill their rect, so they are placed at its top left. The
+        // first child is painted fitted into its rect by a transform instead,
+        // so its offset is unused. The rect count is validated by
+        // _checkRectCount above in debug mode; in release mode a missing rect
+        // falls back to Rect.zero.
         final rect = i < _rects.length ? _rects[i] : Rect.zero;
-        childParentData.offset =
-            resolvedAlignment.alongOffset(rect.size - child.size as Offset) +
-            Offset(rect.left, rect.top);
+        childParentData.offset = rect.topLeft;
       }
 
       assert(child.parentData == childParentData);
@@ -315,7 +352,10 @@ class RenderFittedBoxWithSiblings extends RenderBox
     _clearPaintData();
   }
 
-  ({Size size, List<Rect> rects}) _computeSize({
+  /// Lays out the children, returning this render object's size, the rects
+  /// from the [delegate], and the constraints the first child (the "box") was
+  /// last laid out with.
+  ({Size size, List<Rect> rects, BoxConstraints boxConstraints}) _computeSize({
     required BoxConstraints constraints,
     required ChildLayouter layoutChild,
   }) {
@@ -325,10 +365,12 @@ class RenderFittedBoxWithSiblings extends RenderBox
             ? constraints.biggest
             : constraints.smallest,
         rects: [],
+        boxConstraints: const BoxConstraints(),
       );
     }
 
     late List<Rect> rects;
+    var boxConstraints = const BoxConstraints();
 
     final nonPositionedConstraints = switch (stackFit) {
       StackFit.loose => constraints.loosen(),
@@ -367,6 +409,12 @@ class RenderFittedBoxWithSiblings extends RenderBox
           }
           return true;
         }());
+
+        final expanded = _expandedBoxConstraints(childSize, rects);
+        if (expanded != null) {
+          boxConstraints = expanded;
+          layoutChild(child, boxConstraints);
+        }
       } else {
         // Fall back to Size.zero when computeRects returned too few rects, so
         // layout completes and the mismatch is reported as a single error by
@@ -386,7 +434,45 @@ class RenderFittedBoxWithSiblings extends RenderBox
         : Size(rects.boundingRect.right, rects.boundingRect.bottom);
     final size = constraints.constrain(boundingSize);
     assert(size.isFinite);
-    return (size: size, rects: rects);
+    return (size: size, rects: rects, boxConstraints: boxConstraints);
+  }
+
+  /// The constraints that grow the box from [boxSize] along [expandBox] to
+  /// fill its rect, the first of [rects], at the scale [fit] applies, or null
+  /// when the box keeps its own size.
+  BoxConstraints? _expandedBoxConstraints(Size boxSize, List<Rect> rects) {
+    final axis = _expandBox;
+    if (axis == null || boxSize.isEmpty || rects.isEmpty) return null;
+    final rect = rects.first;
+    if (rect.isEmpty) return null;
+
+    // The destination size over the source size is the scale the fit applies
+    // to the box, so the rect's extent over that scale fills the rect. The
+    // cross axis is loose, because tight constraints would make the box a
+    // relayout boundary, so a change inside it would stop at the box, and the
+    // delegate would not see its new size.
+    final sizes = applyBoxFit(_fit, boxSize, rect.size);
+    switch (axis) {
+      case Axis.horizontal:
+        final width = rect.width / sizes.destination.width * sizes.source.width;
+        return width > boxSize.width
+            ? BoxConstraints(
+                minWidth: width,
+                maxWidth: width,
+                maxHeight: boxSize.height,
+              )
+            : null;
+      case Axis.vertical:
+        final height =
+            rect.height / sizes.destination.height * sizes.source.height;
+        return height > boxSize.height
+            ? BoxConstraints(
+                maxWidth: boxSize.width,
+                minHeight: height,
+                maxHeight: height,
+              )
+            : null;
+    }
   }
 
   /// In debug mode, throws a [FlutterError] if the number of rects returned
@@ -424,36 +510,32 @@ class RenderFittedBoxWithSiblings extends RenderBox
     _transform = null;
   }
 
-  bool get _hasEmptyFirstChild =>
-      firstChild != null && firstChild!.size.isEmpty;
+  /// Whether the first child (the "box") paints nothing, because its size is
+  /// empty, or its rect is, which scales it to nothing. In release mode a
+  /// missing rect counts as empty, matching the Rect.zero fallback in
+  /// performLayout.
+  bool get _boxPaintsNothing =>
+      firstChild != null &&
+      (firstChild!.size.isEmpty || (_rects.firstOrNull?.isEmpty ?? true));
 
   void _updatePaintData() {
     if (_transform != null) {
       return;
     }
 
-    // The _rects list is only empty on an error frame, when computeRects
-    // returned no rects for a non-zero number of children.
-    if (firstChild == null || _hasEmptyFirstChild || _rects.isEmpty) {
-      // Siblings are still painted when the first child is empty, so they
-      // can still overflow the bounds.
+    if (firstChild == null || _boxPaintsNothing) {
+      // Siblings are still painted when the first child paints nothing, so
+      // they can still overflow the bounds.
       _hasVisualOverflow = _siblingsOverflowBounds;
       _transform = Matrix4.identity();
     } else {
-      final boxRect = _rects[0];
-      final resolvedAlignment = _resolvedAlignment;
       final childSize = firstChild!.size;
-      final sizes = applyBoxFit(_fit, childSize, boxRect.size);
-      final scaleX = sizes.destination.width / sizes.source.width;
-      final scaleY = sizes.destination.height / sizes.source.height;
-      final sourceRect = resolvedAlignment.inscribe(
-        sizes.source,
-        Offset.zero & childSize,
+      final (source: sourceRect, destination: destinationRect) = _fitBox(
+        childSize,
+        _rects[0],
       );
-      final destinationRect = resolvedAlignment.inscribe(
-        sizes.destination,
-        boxRect,
-      );
+      final scaleX = destinationRect.width / sourceRect.width;
+      final scaleY = destinationRect.height / sourceRect.height;
       // There is visual overflow if the fit crops the first child (the
       // source rect is smaller than the child), or if the first child's
       // destination rect or any sibling rect extends outside the bounds.
@@ -523,7 +605,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
     Offset offset,
   ) {
     TransformLayer? layer;
-    final skipFirstChild = _hasEmptyFirstChild;
+    final skipFirstChild = _boxPaintsNothing;
     var child = firstChild;
     while (child != null) {
       final childParentData = child.parentData! as StackParentData;
@@ -567,7 +649,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
       return false;
     }
 
-    final skipFirstChild = _hasEmptyFirstChild;
+    final skipFirstChild = _boxPaintsNothing;
     var child = lastChild;
     while (child != null) {
       final childParentData = child.parentData! as StackParentData;
@@ -611,7 +693,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
     assert(child.parent == this);
     if (size.isEmpty) return false;
     if (identical(child, firstChild)) {
-      return !child.size.isEmpty;
+      return !_boxPaintsNothing;
     } else {
       return super.paintsChild(child);
     }
@@ -657,7 +739,8 @@ class RenderFittedBoxWithSiblings extends RenderBox
           clipBehavior,
           defaultValue: Clip.none,
         ),
-      );
+      )
+      ..add(EnumProperty<Axis>('expandBox', expandBox, defaultValue: null));
   }
 }
 
