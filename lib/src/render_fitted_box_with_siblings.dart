@@ -173,14 +173,6 @@ class RenderFittedBoxWithSiblings extends RenderBox
   }
 
   @override
-  void markNeedsLayout() {
-    // Marking the WrapToFit texts for a new wrap width marks their ancestors
-    // too, up to this, which is already laying them out.
-    if (_markingWrapTexts) return;
-    super.markNeedsLayout();
-  }
-
-  @override
   double computeMinIntrinsicWidth(double height) {
     return _getIntrinsicDimension(
       firstChild,
@@ -688,7 +680,9 @@ class RenderFittedBoxWithSiblings extends RenderBox
   /// layout, so laying out the box lays out only them again.
   void _setWrapWidth(Iterable<RenderWrapToFit> texts, double width) {
     // Marking a descendant is allowed in a layout callback, which is how
-    // LayoutBuilder rebuilds its child.
+    // LayoutBuilder rebuilds its child. The marks reach this, clearing its
+    // cached intrinsic sizes, which depend on the wrap width, but the
+    // callback keeps them from going above it.
     invokeLayoutCallback<BoxConstraints>((_) {
       _markingWrapTexts = true;
       try {

@@ -685,6 +685,27 @@ void main() {
     expect(box.getDryLayout(const BoxConstraints()), box.size);
   });
 
+  testWidgets('intrinsic sizes use the width the last layout picked', (
+    WidgetTester tester,
+  ) async {
+    // The delegate stays the same, so only the room changes.
+    Widget build(Size room) => _build(
+      room: room,
+      box: WrapToFit(key: _boxKey, child: _text(_words)),
+    );
+
+    await tester.pumpWidget(build(const Size(200, 100)));
+    final fitted = tester.renderObject<RenderBox>(
+      find.byType(FittedBoxWithSiblings),
+    );
+    expect(fitted.getMaxIntrinsicWidth(double.infinity), lessThan(490));
+
+    // A wide, short room unwraps the text.
+    await tester.pumpWidget(build(const Size(600, 10)));
+    expect(_sizeOf(tester, _textKey), const Size(490, 10));
+    expect(fitted.getMaxIntrinsicWidth(double.infinity), 490);
+  });
+
   testWidgets("doesn't wrap a text in a sibling", (WidgetTester tester) async {
     const siblingTextKey = Key('sibling text');
     await tester.pumpWidget(
