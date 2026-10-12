@@ -803,6 +803,46 @@ void main() {
       await tester.pumpWidget(build(moved: true));
       expect(_sizeOf(tester, _textKey), const Size(490, 10));
     });
+
+    testWidgets('into a sibling when the children are reordered', (
+      WidgetTester tester,
+    ) async {
+      // Reordering moves the text without detaching it, and the new box is
+      // the size of the old one, so only the box being another one tells the
+      // FittedBoxWithSiblings to pick the width again.
+      final delegate = TestRectsDelegate(
+        (constraints, boxSize) => [
+          Offset.zero & constraints.biggest,
+          Offset.zero & constraints.biggest,
+        ],
+      );
+      final text = Center(
+        key: const Key('wrapped'),
+        child: WrapToFit(child: _text(_words)),
+      );
+      const other = SizedBox(key: Key('other'), width: 90, height: 50);
+
+      await tester.pumpWidget(
+        _build(
+          room: const Size(200, 100),
+          delegate: delegate,
+          box: text,
+          siblings: [other],
+        ),
+      );
+      expect(_sizeOf(tester, _textKey), const Size(90, 50));
+
+      // In the sibling, the text wraps only at its 200 wide rect.
+      await tester.pumpWidget(
+        _build(
+          room: const Size(200, 100),
+          delegate: delegate,
+          box: other,
+          siblings: [text],
+        ),
+      );
+      expect(_sizeOf(tester, _textKey), const Size(190, 30));
+    });
   });
 }
 

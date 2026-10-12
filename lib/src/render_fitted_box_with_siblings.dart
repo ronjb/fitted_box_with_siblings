@@ -497,9 +497,8 @@ class RenderFittedBoxWithSiblings extends RenderBox
   // above. Those inside the box wrap at the width the search picks.
   final _wrapTexts = <RenderWrapToFit>{};
 
-  // The width the search last picked, or infinity for no wrapping, and the
-  // room and box size it was picked for.
-  double _wrapWidth = double.infinity;
+  // The box, room, and box size the search last picked the width for.
+  RenderBox? _wrapBox;
   BoxConstraints? _wrapRoom;
   Size? _wrapBoxSize;
 
@@ -515,8 +514,10 @@ class RenderFittedBoxWithSiblings extends RenderBox
   /// its size.
   Size _layoutBoxWrapped(RenderBox box, BoxConstraints room) {
     // The width is kept while nothing it depends on changes, as on a clock
-    // tick, which then costs one layout, as it would without wrapping.
-    if (!_wrapWidthStale && room == _wrapRoom) {
+    // tick, which then costs one layout, as it would without wrapping. A new
+    // box counts as a change: reordering the children moves texts between the
+    // box and a sibling without detaching them.
+    if (!_wrapWidthStale && identical(box, _wrapBox) && room == _wrapRoom) {
       final size = ChildLayoutHelper.layoutChild(box, const BoxConstraints());
       if (size == _wrapBoxSize) return size;
     }
@@ -524,6 +525,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
     // Anything that changes during the search counts for the next layout.
     _wrapWidthStale = false;
     _searchWrapWidth(box, room);
+    _wrapBox = box;
     _wrapRoom = room;
     return _wrapBoxSize = box.size;
   }
@@ -539,8 +541,6 @@ class RenderFittedBoxWithSiblings extends RenderBox
   /// largest, until no two could beat the best found, or it has tried about
   /// 25.
   void _searchWrapWidth(RenderBox box, BoxConstraints room) {
-    _wrapWidth = double.infinity;
-
     // Unwrapped first: where wrapping can't help, that's the layout. This
     // also unwraps a WrapToFit outside the box, which never wraps.
     _setWrapWidth(_wrapTexts, double.infinity);
@@ -661,8 +661,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
       trial(split);
     }
 
-    _wrapWidth = best().w;
-    _setWrapWidth(texts, _wrapWidth);
+    _setWrapWidth(texts, best().w);
     ChildLayoutHelper.layoutChild(box, const BoxConstraints());
   }
 
