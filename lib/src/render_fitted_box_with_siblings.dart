@@ -30,10 +30,12 @@ abstract class FittedBoxWithSiblingsDelegate {
   /// The returned list must contain exactly one finite rect per child.
   ///
   /// When the box has a [WrapToFit] inside it, this is also called for each
-  /// wrap width tried, and some 30 to 200 times with box sizes no layout
-  /// gave, or about 350 for a rect that changes at nearly every shape of the
-  /// box, to find the width that shows the box largest, so the rects should
-  /// depend only on the arguments, and be cheap to compute.
+  /// wrap width tried, up to about 25 times a layout, to find the width that
+  /// shows the box largest, so the rects should depend only on the
+  /// arguments. To skip widths that can't show the box larger, the search
+  /// assumes the box's rect lies within `constraints.biggest`, and that where
+  /// this returns the same rect for the box at two widths, it returns that
+  /// rect at the widths between them.
   List<Rect> computeRects(BoxConstraints constraints, Size boxSize);
 
   /// Called whenever a new delegate instance is provided to the render
@@ -536,8 +538,15 @@ class RenderFittedBoxWithSiblings extends RenderBox
 
   /// Finds the widest wrap width at which the [box] shows largest in the
   /// [room], and leaves the box laid out at it.
+  ///
+  /// Narrowing the width never makes the box wider or shorter. So between
+  /// two widths tried, the box is no narrower than at the narrower one, and
+  /// no shorter than at the wider one, which bounds how large the room, or
+  /// the rect the delegate gave at both, if it gave the same one, could show
+  /// it there. This tries the widths between the two that could show it
+  /// largest, until no two could beat the best found, or it has tried about
+  /// 25.
   void _searchWrapWidth(RenderBox box, BoxConstraints room) {
-    final previous = _wrapWidth;
     _wrapWidth = double.infinity;
 
     // Unwrapped first: where wrapping can't help, that's the layout. This
@@ -563,381 +572,106 @@ class RenderFittedBoxWithSiblings extends RenderBox
       return;
     }
 
-    Size layoutAt(double width) {
+    // The layouts tried, from the narrowest.
+    final trials = <_Trial>[];
+    _Trial trial(double width) {
       _setWrapWidth(texts, width);
-      return ChildLayoutHelper.layoutChild(box, const BoxConstraints());
-    }
-
-    _Trial measure(double width) {
-      final size = layoutAt(width);
-      // Every width from the widest line up gives the same lines.
+      final size = ChildLayoutHelper.layoutChild(box, const BoxConstraints());
       var floor = 0.0;
       for (final text in texts) {
         floor = math.max(floor, text._laidOutWidth);
       }
-      var rectSize = Size.zero;
-      var sx = 0.0;
-      var sy = 0.0;
-      if (!size.isEmpty) {
-        final rect = delegate.computeRects(room, size).firstOrNull;
-        if (rect != null && rect.isFinite && !rect.isEmpty) {
-          rectSize = rect.size;
-          sx = rect.width / size.width;
-          sy = rect.height / size.height;
-        }
-      }
-      return (
-        w: width.isFinite ? width : floor,
-        floor: math.min(width, floor),
+      floor = math.min(floor, width);
+      final rect = size.isEmpty
+          ? null
+          : delegate.computeRects(room, size).firstOrNull;
+      final fits = rect != null && rect.isFinite && !rect.isEmpty;
+      final t = (
+        w: width,
+        floor: floor,
         size: size,
-        rect: rectSize,
-        sx: sx,
-        sy: sy,
-        scale: math.min(maxScale, math.min(sx, sy)),
+        rect: fits ? rect.size : Size.zero,
+        scale: fits
+            ? math.min(
+                maxScale,
+                math.min(rect.width / size.width, rect.height / size.height),
+              )
+            : 0.0,
       );
+
+      // Every width from a layout's widest line up to the widest width tried
+      // that gave it gives the same lines.
+      final i = trials.indexWhere((other) => other.floor >= floor);
+      if (i < 0) {
+        trials.add(t);
+      } else if (trials[i].floor != floor) {
+        trials.insert(i, t);
+      } else if (width > trials[i].w) {
+        trials[i] = t;
+      }
+      return t;
     }
 
     // The widest width worth trying is the widest line unwrapped, and the
-    // narrowest is the longest word, which the text keeps until it changes.
-    final unwrapped = measure(double.infinity);
-    final hi = unwrapped.floor;
-    if (hi <= 1 || unwrapped.size.isEmpty || unwrapped.scale >= maxScale) {
-      return;
-    }
+    // narrowest is the longest word.
+    final unwrapped = trial(double.infinity);
     var lo = 1.0;
     for (final text in texts) {
       lo = math.max(lo, text.getMinIntrinsicWidth(double.infinity));
     }
-    lo = math.min(lo, hi);
-
-    final trials = <double, _Trial>{hi: unwrapped};
-    _Trial trial(double width) {
-      final clamped = clampDouble(width, lo, hi);
-      return trials[clamped] ??= measure(clamped);
+    if (unwrapped.size.isEmpty ||
+        unwrapped.scale >= maxScale ||
+        lo >= unwrapped.floor) {
+      return;
     }
+    trial(lo);
 
-    // The box shows largest where it takes the shape of its rect, and the
-    // rect can depend on the box's shape, as when the siblings go beside a
-    // wide box and below a tall one. So aim for each shape, from the
-    // narrowest the text can make the box to the unwrapped one, at which a
-    // box shows larger than at the shapes either side of it, and lay the box
-    // out at each to decide between them. Finding the shapes asks for the
-    // rects of boxes with the unwrapped box's area, with no layout. Comparing
-    // the scales of shapes far apart would rest on that area, which wrapping
-    // changes: it adds to a box whose width another row sets, and takes from
-    // one whose height another row sets.
-    final area = unwrapped.size.width * unwrapped.size.height;
-    _ShapeFit fitAt(double aspect) {
-      final size = Size(math.sqrt(area * aspect), math.sqrt(area / aspect));
-      final rect = delegate.computeRects(room, size).firstOrNull;
-      return rect == null || !rect.isFinite || rect.isEmpty
-          ? (excess: double.nan, scale: 0)
-          : (
-              excess: math.log(aspect * rect.height / rect.width),
-              scale: math.min(
-                rect.width / size.width,
-                rect.height / size.height,
-              ),
-            );
-    }
+    // The layout with the largest scale, and of those, the widest lines.
+    _Trial best() => trials.reduce(
+      (best, t) =>
+          t.scale > best.scale ||
+              (t.scale == best.scale && t.floor > best.floor)
+          ? t
+          : best,
+    );
 
-    final targets = _shapeTargets(trial(lo).aspect, unwrapped.aspect, fitAt);
-    // Where the rect changes at nearly every shape, laying the box out at
-    // every target would take a hundred layouts, so keep the few at which a
-    // box of the unwrapped box's area shows largest. Wrapping changes that
-    // area, but the layouts still decide between the ones kept.
-    const maxTargets = 4;
-    if (targets.length > maxTargets) {
-      targets
-        ..sort((a, b) => b.scale.compareTo(a.scale))
-        ..length = maxTargets;
-    }
-    if (targets.isNotEmpty) {
-      // Start from the last width, which a small change keeps close.
-      if (previous > lo && previous < hi) trial(previous);
-      for (final target in targets) {
-        _findAspect(target.aspect, lo, maxScale, trials, trial);
-      }
-    }
+    // Where the rect changes between most widths, every line break could
+    // beat the best, so the search stops after about 25 layouts.
+    for (var tries = 2; tries < 25; tries++) {
+      final most = best();
+      var split = double.nan;
+      var splitBound = double.negativeInfinity;
+      for (var i = 0; i + 1 < trials.length; i++) {
+        final narrower = trials[i];
+        final wider = trials[i + 1];
+        // Lines within half a pixel show the box at nearly the same scale.
+        if (wider.floor - narrower.w < 0.5) continue;
 
-    // The best scale, and the widest width that gets it.
-    var best = unwrapped;
-    for (final t in trials.values) {
-      if (t.scale > best.scale || (t.scale == best.scale && t.w > best.w)) {
-        best = t;
-      }
-    }
-
-    // A fit that doesn't scale the box up does as well at every width at
-    // which the box fits its rect unscaled, so look for the widest, between
-    // the widest found and the narrowest found too wide.
-    if (best.scale >= maxScale) {
-      var tooWide = hi;
-      for (final t in trials.values) {
-        if (t.scale < maxScale && t.w > best.w) {
-          tooWide = math.min(tooWide, t.floor);
-        }
-      }
-      while (tooWide / best.w > 1.01) {
-        final t = trial(math.sqrt(best.w * tooWide));
-        if (t.scale >= maxScale) {
-          best = t;
-        } else {
-          tooWide = t.floor;
-        }
-      }
-    }
-
-    // Where another row sets the box's width, the text can widen into the
-    // room that row leaves it without changing the box.
-    if (best.w < hi) {
-      layoutAt(best.w);
-      var roomy = best.w;
-      // Reading the sizes of descendants is allowed in a layout callback.
-      invokeLayoutCallback<BoxConstraints>(
-        (_) => roomy = _widestWithoutWidening(box, texts, best.w),
-      );
-      if (roomy > best.w * 1.001) {
-        final t = trial(roomy);
-        if (t.scale >= best.scale) best = t;
-      }
-    }
-
-    _wrapWidth = best.w < hi ? best.w : double.infinity;
-    layoutAt(_wrapWidth);
-  }
-
-  /// The shapes, from the aspect ratios [narrowest] to [widest], at which a
-  /// box shows larger than at the shapes either side of it, each with the
-  /// scale its rect gives it, where [fitAt] gives how a box of a shape fits
-  /// its rect.
-  static List<_ShapeTarget> _shapeTargets(
-    double narrowest,
-    double widest,
-    _ShapeFit Function(double aspect) fitAt,
-  ) {
-    final targets = <_ShapeTarget>[];
-    if (!(narrowest < widest)) return targets;
-
-    // A rect that follows the box's shape gives an excess of 0, give or take
-    // rounding, so the comparisons allow for that.
-    const tolerance = 1e-9;
-
-    // The first shape from [a] to [b] at which [isPast] holds, to within a
-    // thousandth of the way between them in log space, and the last before
-    // it, each with how a box of it fits its rect, given [fitA] and [fitB]
-    // for [a] and [b].
-    ({double before, _ShapeFit fitBefore, double past, _ShapeFit fitPast})
-    bisect(
-      double a,
-      _ShapeFit fitA,
-      double b,
-      _ShapeFit fitB,
-      bool Function(double aspect, _ShapeFit fit) isPast,
-    ) {
-      var before = a;
-      var fitBefore = fitA;
-      var past = b;
-      var fitPast = fitB;
-      for (var i = 0; i < 10; i++) {
-        final mid = math.sqrt(before * past);
-        final fitMid = fitAt(mid);
-        if (isPast(mid, fitMid)) {
-          past = mid;
-          fitPast = fitMid;
-        } else {
-          before = mid;
-          fitBefore = fitMid;
-        }
-      }
-      return (
-        before: before,
-        fitBefore: fitBefore,
-        past: past,
-        fitPast: fitPast,
-      );
-    }
-
-    // Whether boxes of the shapes [a0] and [a1], with the excesses [e0] and
-    // [e1], have the same rect: one whose shape stays the same, so the
-    // excess grows with the box's shape, or one that follows the box's
-    // shape, so the excess stays the same.
-    bool sameRect(double a0, double e0, double a1, double e1) =>
-        (e1 - e0 - math.log(a1 / a0)).abs() <= tolerance ||
-        (e1 - e0).abs() <= tolerance;
-
-    var a0 = narrowest;
-    var f0 = fitAt(a0);
-    // Even the narrowest box is no narrower than its rect.
-    if (f0.excess >= -tolerance) targets.add((aspect: a0, scale: f0.scale));
-
-    const steps = 32;
-    final step = math.pow(widest / narrowest, 1 / steps);
-    for (var i = 1; i <= steps; i++) {
-      final a1 = narrowest * math.pow(step, i);
-      final f1 = fitAt(a1);
-
-      // Where the rect changes, the box shows largest just before the change
-      // if it grows up to it, being no wider than its rect, and the new rect
-      // shows it smaller. It shows largest just past the change if the new
-      // rect shows it larger, and it shrinks from there, being no narrower
-      // than the new rect. The two sides are the same shape, so comparing
-      // their scales doesn't rest on the area.
-      if (!f0.excess.isNaN &&
-          !f1.excess.isNaN &&
-          !sameRect(a0, f0.excess, a1, f1.excess)) {
-        final start = a0;
-        final startExcess = f0.excess;
-        final (:before, :fitBefore, :past, :fitPast) = bisect(
-          start,
-          f0,
-          a1,
-          f1,
-          (a, fit) => !sameRect(start, startExcess, a, fit.excess),
+        final rect = narrower.rect == wider.rect ? narrower.rect : roomSize;
+        final bound = math.min(
+          maxScale,
+          math.min(
+            rect.width / narrower.size.width,
+            rect.height / wider.size.height,
+          ),
         );
-        if (fitBefore.excess <= tolerance && fitBefore.scale >= fitPast.scale) {
-          targets.add((aspect: before, scale: fitBefore.scale));
+        // The widths between are wider than the narrower one, so they win a
+        // tie with it, or with any narrower one.
+        final couldBeat =
+            bound > most.scale ||
+            (bound == most.scale && narrower.floor >= most.floor);
+        if (couldBeat && bound > splitBound) {
+          splitBound = bound;
+          split = math.sqrt(narrower.w * wider.floor);
         }
-        if (fitPast.excess >= -tolerance && fitPast.scale >= fitBefore.scale) {
-          targets.add((aspect: past, scale: fitPast.scale));
-        }
-        a0 = past;
-        f0 = fitPast;
       }
-
-      if (f0.excess < -tolerance && f1.excess >= -tolerance) {
-        final crossing = bisect(
-          a0,
-          f0,
-          a1,
-          f1,
-          (a, fit) => fit.excess >= -tolerance,
-        );
-        targets.add((aspect: crossing.past, scale: crossing.fitPast.scale));
-      }
-      a0 = a1;
-      f0 = f1;
-    }
-    return targets;
-  }
-
-  /// Narrows in on the wrap width at which the box's aspect ratio, which
-  /// grows with the width, reaches [target], adding to [trials].
-  static void _findAspect(
-    double target,
-    double lo,
-    double maxScale,
-    Map<double, _Trial> trials,
-    _Trial Function(double width) trial,
-  ) {
-    // f(x) = ln(aspect / target) at x = ln(w) grows by 1 to 2 for each 1 x
-    // grows: by 2 where the text sets the box's width as well as adding to
-    // its height, by 1 where another row sets the width.
-    double f(_Trial t) => math.log(t.aspect / target);
-
-    // The widest trial narrower than the target, and the narrowest one at
-    // least as wide, which the unwrapped box is.
-    final below = trials.values.where((t) => f(t) < 0);
-    var narrower = below.isEmpty
-        ? null
-        : below.reduce((p, t) => t.w > p.w ? t : p);
-    var b = trials.values
-        .where((t) => f(t) >= 0)
-        .reduce((p, t) => t.w < p.w ? t : p);
-
-    // Step down to a width narrower than the target. A slope of 1 oversteps
-    // where it's 2, which is fine, since that's the side being looked for;
-    // after one step, use the slope seen.
-    _Trial? previousB;
-    for (var i = 0; narrower == null && i < 4; i++) {
-      var slope = 1.0;
-      if (previousB != null) {
-        final seen = (f(previousB) - f(b)) / math.log(previousB.w / b.w);
-        if (seen.isFinite) slope = clampDouble(seen, 0.25, 3);
-      }
-      final guess = b.floor * math.exp(-f(b) / slope) * 0.98;
-      final t = trial(math.max(lo, guess));
-      if (f(t) < 0) {
-        narrower = t;
-      } else if (t.w <= lo) {
-        return; // Even the narrowest is too wide.
-      } else {
-        previousB = b;
-        b = t;
-      }
-    }
-    if (narrower == null) {
-      final t = trial(lo);
-      if (f(t) >= 0) return;
-      narrower = t;
+      if (split.isNaN) break;
+      trial(split);
     }
 
-    var a = narrower;
-    var fa = f(a);
-    var fb = f(b);
-    var side = 0;
-    // Line breaks come in steps, so finer than 1% rarely finds another.
-    // Every width from b's floor up gives b's lines, so the widths left to
-    // look at lie between a and b's floor.
-    for (var i = 0; i < 8 && b.floor / a.w > 1.01; i++) {
-      // No width between a and b beats the scale a gets where only its width
-      // limits it, or b where only its height does: stop once the best found
-      // is that close. (Both must have the same rect, so the same siblings.)
-      final sameRect =
-          (a.rect.width - b.rect.width).abs() < 0.5 &&
-          (a.rect.height - b.rect.height).abs() < 0.5;
-      final bound = math.min(maxScale, math.min(a.sx, b.sy));
-      if (sameRect && math.max(a.scale, b.scale) >= bound * 0.995) break;
-
-      // Illinois: regula falsi in log space, halving a stuck end's weight.
-      final xa = math.log(a.w);
-      final xb = math.log(b.floor);
-      var x = xb - fb * (xb - xa) / (fb - fa);
-      // Keep clear of the ends, so a step in the text can't stall it.
-      final margin = (xb - xa) * 0.05;
-      x = clampDouble(x, xa + margin, xb - margin);
-      final t = trial(math.exp(x));
-      final ft = f(t);
-      if (ft < 0) {
-        a = t;
-        fa = ft;
-        if (side == -1) fb /= 2;
-        side = -1;
-      } else {
-        b = t;
-        fb = ft;
-        if (side == 1) fa /= 2;
-        side = 1;
-      }
-    }
-  }
-
-  /// The widest wrap width, from [width], at which none of the [texts] gets
-  /// wider than the room its ancestors in the [box] leave it, so the box
-  /// keeps its width.
-  static double _widestWithoutWidening(
-    RenderBox box,
-    List<RenderWrapToFit> texts,
-    double width,
-  ) {
-    var widest = double.infinity;
-    for (final text in texts) {
-      // A text can widen by the room each ancestor leaves beside it without
-      // widening the box: a column wider than it, or a min width. A row or
-      // padding widens with it.
-      var room = 0.0;
-      RenderBox node = text;
-      while (node != box && node.parent is RenderBox) {
-        final parent = node.parent! as RenderBox;
-        if (!(parent is RenderFlex && parent.direction == Axis.horizontal) &&
-            parent is! RenderPadding) {
-          room += math.max(0, parent.size.width - node.size.width);
-        }
-        node = parent;
-      }
-      widest = math.min(widest, text.size.width + room);
-    }
-    return math.max(width, widest);
+    _wrapWidth = best().w;
+    _setWrapWidth(texts, _wrapWidth);
+    ChildLayoutHelper.layoutChild(box, const BoxConstraints());
   }
 
   /// Whether [text] is inside the first child (the "box"), rather than a
@@ -1349,31 +1083,10 @@ class RenderWrapToFit extends RenderProxyBox {
 }
 
 /// One layout of the box at the wrap width `w`, where `floor` is the
-/// narrowest width that gives the same lines, the widest line, `rect` is the
-/// size of the box's rect, `sx` and `sy` are the scales the rect's width and
-/// height would give the box, and `scale` is the scale the fit gives it.
-typedef _Trial = ({
-  double w,
-  double floor,
-  Size size,
-  Size rect,
-  double sx,
-  double sy,
-  double scale,
-});
-
-extension on _Trial {
-  double get aspect => size.width / size.height;
-}
-
-/// How a box of a shape fits its rect: `excess` is the log of the box's
-/// aspect ratio over its rect's, or NaN for no rect, and `scale` is the
-/// smaller of the scales the rect's width and height would give the box.
-typedef _ShapeFit = ({double excess, double scale});
-
-/// A shape the search aims for: the box's aspect ratio there, and the scale
-/// its rect gives a box of the unwrapped box's area.
-typedef _ShapeTarget = ({double aspect, double scale});
+/// narrowest width that gives the same lines, the widest line, `rect` is
+/// the size of the box's rect, and `scale` is the scale the fit gives the
+/// box in it.
+typedef _Trial = ({double w, double floor, Size size, Size rect, double scale});
 
 extension on Iterable<Rect> {
   Rect get boundingRect {

@@ -18,6 +18,19 @@ const _words = 'aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa';
 const _someWords =
     'aaaa bb cccccc d eeeee ffff gg hhhhhhh i jjjj kkkkk ll mmm nnnnnn';
 
+// Names, as in a list of players.
+const _names = 'Ann Cole, Ben Diaz, Cal Evans, Dee Fox, Eli Grant, Fay Hall';
+
+// Sixty-nine words, as in a paragraph.
+const _lorem =
+    'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod '
+    'tempor incididunt ut labore et dolore magna aliqua ut enim ad minim '
+    'veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea '
+    'commodo consequat duis aute irure dolor in reprehenderit in voluptate '
+    'velit esse cillum dolore eu fugiat nulla pariatur';
+final _fiftyWords = _lorem.split(' ').take(50).join(' ');
+final _hundredWords = '$_lorem $_lorem'.split(' ').take(100).join(' ');
+
 const _textKey = Key('text');
 const _boxKey = Key('box');
 
@@ -134,8 +147,7 @@ void main() {
     }
 
     // A small rect beside a box up to 0.8 times as wide as it is high, and a
-    // much larger one, of a shape only 13% wider, beside a wider box. With
-    // this text, the search asks about shapes 15% apart.
+    // much larger one, of a shape only 13% wider, beside a wider box.
     List<Rect> aLittleWiderRect(BoxConstraints constraints, Size boxSize) =>
         boxSize.width / boxSize.height > 0.8
         ? const [Rect.fromLTWH(0, 0, 340, 400), Rect.fromLTWH(340, 0, 60, 400)]
@@ -151,9 +163,19 @@ void main() {
         ? const [Rect.fromLTWH(0, 0, 320, 400), Rect.fromLTWH(320, 0, 80, 400)]
         : const [Rect.fromLTWH(0, 0, 50, 100), Rect.fromLTWH(50, 0, 350, 400)];
 
+    // A sidebar that takes 40% of the room's width, whatever the box's shape.
+    List<Rect> aSidebar(BoxConstraints constraints, Size boxSize) {
+      final room = constraints.biggest;
+      return [
+        Rect.fromLTWH(0, 0, room.width * 0.6, room.height),
+        Rect.fromLTWH(room.width * 0.6, 0, room.width * 0.4, room.height),
+      ];
+    }
+
     final cases = [
       (
         name: 'a text alone',
+        text: _someWords,
         room: const Size(300, 200),
         box: (Widget text) => text,
         rects: _fill,
@@ -161,6 +183,7 @@ void main() {
       ),
       (
         name: 'a text under a narrower row',
+        text: _someWords,
         room: const Size(400, 300),
         box: (Widget text) =>
             Column(children: [const SizedBox(width: 120, height: 30), text]),
@@ -169,6 +192,7 @@ void main() {
       ),
       (
         name: 'siblings that go beside or below the box',
+        text: _someWords,
         room: const Size(500, 400),
         box: (Widget text) => text,
         rects: besideOrBelow,
@@ -176,6 +200,7 @@ void main() {
       ),
       (
         name: 'siblings that go below only a much wider box',
+        text: _someWords,
         room: const Size(400, 400),
         box: (Widget text) => text,
         rects: belowOnlyAWideBox,
@@ -183,13 +208,15 @@ void main() {
       ),
       (
         name: 'a rect that follows the box',
+        text: _someWords,
         room: const Size(400, 400),
         box: (Widget text) => text,
         rects: _followTheBox,
         siblings: 1,
       ),
       (
-        name: 'a rect that changes shape by less than the search steps',
+        name: 'a rect that changes to a much larger one of nearly its shape',
+        text: _someWords,
         room: const Size(400, 400),
         box: (Widget text) => text,
         rects: aLittleWiderRect,
@@ -197,6 +224,7 @@ void main() {
       ),
       (
         name: 'a box already wider than the rect it changes to',
+        text: _someWords,
         room: const Size(400, 400),
         box: (Widget text) => text,
         rects: aRectNarrowerThanTheBox,
@@ -204,6 +232,7 @@ void main() {
       ),
       (
         name: 'tables beside the box, in as many columns as fit',
+        text: _someWords,
         room: const Size(1920, 100),
         box: (Widget text) => text,
         rects: _tablesBeside,
@@ -211,6 +240,69 @@ void main() {
       ),
       (
         name: 'a rect that changes at nearly every shape',
+        text: _someWords,
+        room: const Size(400, 400),
+        box: (Widget text) => text,
+        rects: _stepsWithTheBox,
+        siblings: 1,
+      ),
+      (
+        name: 'names under a clock, with siblings beside or below',
+        text: _names,
+        room: const Size(390, 300),
+        box: (Widget text) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('12:34', style: TextStyle(fontSize: 48)),
+            text,
+          ],
+        ),
+        rects: besideOrBelow,
+        siblings: 1,
+      ),
+      (
+        name: 'fifty words alone',
+        text: _fiftyWords,
+        room: const Size(400, 300),
+        box: (Widget text) => text,
+        rects: _fill,
+        siblings: 0,
+      ),
+      (
+        name: 'fifty words beside a sidebar',
+        text: _fiftyWords,
+        room: const Size(400, 300),
+        box: (Widget text) => text,
+        rects: aSidebar,
+        siblings: 1,
+      ),
+      (
+        name: 'a hundred words alone',
+        text: _hundredWords,
+        room: const Size(400, 300),
+        box: (Widget text) => text,
+        rects: _fill,
+        siblings: 0,
+      ),
+      (
+        name: 'a hundred words, with siblings beside or below',
+        text: _hundredWords,
+        room: const Size(500, 400),
+        box: (Widget text) => text,
+        rects: besideOrBelow,
+        siblings: 1,
+      ),
+      (
+        name: 'a hundred words beside a sidebar',
+        text: _hundredWords,
+        room: const Size(400, 300),
+        box: (Widget text) => text,
+        rects: aSidebar,
+        siblings: 1,
+      ),
+      (
+        name: 'a hundred words, with a rect that changes at nearly every shape',
+        text: _hundredWords,
         room: const Size(400, 400),
         box: (Widget text) => text,
         rects: _stepsWithTheBox,
@@ -227,85 +319,41 @@ void main() {
           siblings: [for (var i = 0; i < c.siblings; i++) const SizedBox()],
         );
 
-        await tester.pumpWidget(build(WrapToFit(child: _text(_someWords))));
+        await tester.pumpWidget(build(WrapToFit(child: _text(c.text))));
         final scale = _scaleOf(tester);
 
         // Every line width is a multiple of 10, from the longest word up to
         // the whole line.
+        final longestWord = c.text
+            .split(' ')
+            .map((word) => word.length)
+            .reduce(math.max);
         var best = 0.0;
-        for (var width = 70.0; width <= 650; width += 10) {
+        for (
+          var width = longestWord * 10.0;
+          width <= c.text.length * 10;
+          width += 10
+        ) {
           await tester.pumpWidget(
             build(
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width),
-                child: _text(_someWords),
+                child: _text(c.text),
               ),
             ),
           );
           if (_scaleOf(tester) > best) best = _scaleOf(tester);
         }
 
-        expect(scale, greaterThanOrEqualTo(best * 0.995));
+        expect(scale, greaterThanOrEqualTo(best));
       });
     }
   });
 
-  testWidgets('asks the delegate about at most 150 shapes, with a rect that '
-      'follows the box', (WidgetTester tester) async {
-    // Tighter than the 200 the docs allow, since the rect changes only where
-    // its height stops following the box.
-    final boxSizes = <Size>[];
-    await tester.pumpWidget(
-      _build(
-        room: const Size(400, 400),
-        delegate: TestRectsDelegate((constraints, boxSize) {
-          boxSizes.add(boxSize);
-          return _followTheBox(constraints, boxSize);
-        }),
-        box: WrapToFit(child: _text(_someWords)),
-        siblings: [const SizedBox()],
-      ),
-    );
-
-    // The test font makes every size a layout gives whole, so the others are
-    // the shapes the search asks about with no layout.
-    bool isWhole(double x) => x == x.roundToDouble();
-    final shapes = boxSizes.where(
-      (size) => !isWhole(size.width) || !isWhole(size.height),
-    );
-    expect(shapes.length, lessThanOrEqualTo(150));
-  });
-
-  testWidgets('asks the delegate about at most 200 shapes, with tables beside '
-      'the box', (WidgetTester tester) async {
-    // The tables' columns, and so the box's rect, change between most of the
-    // shapes the search asks about.
-    final boxSizes = <Size>[];
-    await tester.pumpWidget(
-      _build(
-        room: const Size(1920, 100),
-        delegate: TestRectsDelegate((constraints, boxSize) {
-          boxSizes.add(boxSize);
-          return _tablesBeside(constraints, boxSize);
-        }),
-        box: WrapToFit(child: _text(_someWords)),
-        siblings: [const SizedBox()],
-      ),
-    );
-
-    // The test font makes every size a layout gives whole, so the others are
-    // the shapes the search asks about with no layout.
-    bool isWhole(double x) => x == x.roundToDouble();
-    final shapes = boxSizes.where(
-      (size) => !isWhole(size.width) || !isWhole(size.height),
-    );
-    expect(shapes.length, lessThanOrEqualTo(200));
-  });
-
-  testWidgets('tries at most 25 widths, and asks the delegate about at most '
-      '400 shapes, with a rect that changes at nearly every shape', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('asks the delegate only about the box sizes it lays out, and '
+      'lays out at most 25', (WidgetTester tester) async {
+    // A long text, and a rect that changes at nearly every shape of the box,
+    // so any line break could beat the best found.
     final boxSizes = <Size>[];
     await tester.pumpWidget(
       _build(
@@ -314,20 +362,19 @@ void main() {
           boxSizes.add(boxSize);
           return _stepsWithTheBox(constraints, boxSize);
         }),
-        box: WrapToFit(child: _text(_someWords)),
+        box: WrapToFit(child: _text(_hundredWords)),
         siblings: [const SizedBox()],
       ),
     );
 
-    // The test font makes every size a layout gives whole, so these are one
-    // for each width tried, and one for the rects of the last layout. The
-    // others are the shapes the search asks about with no layout.
+    // The test font makes every size a layout gives whole. One size is for
+    // the rects of the last layout.
     bool isWhole(double x) => x == x.roundToDouble();
-    final laidOut = boxSizes.where(
-      (size) => isWhole(size.width) && isWhole(size.height),
+    expect(
+      boxSizes.every((size) => isWhole(size.width) && isWhole(size.height)),
+      isTrue,
     );
-    expect(laidOut.length - 1, lessThanOrEqualTo(25));
-    expect(boxSizes.length - laidOut.length, lessThanOrEqualTo(400));
+    expect(boxSizes.length - 1, lessThanOrEqualTo(25));
   });
 
   testWidgets('with BoxFit.scaleDown, wraps only as much as the box needs to '
@@ -779,7 +826,7 @@ List<Rect> _tablesBeside(BoxConstraints constraints, Size boxSize) {
 
 // The box's rect beside the sibling's, wider for a wider box, in 20 steps for
 // each factor of e in the box's shape, so it changes between nearly any two
-// shapes the search asks about.
+// widths the search tries.
 List<Rect> _stepsWithTheBox(BoxConstraints constraints, Size boxSize) {
   final room = constraints.biggest;
   final steps = (20 * math.log(boxSize.width / boxSize.height)).floor();

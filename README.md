@@ -113,7 +113,7 @@ FittedBoxWithSiblings(
 `FittedBoxWithSiblings` tries wrap widths during layout, and keeps the widest one that gives the box the largest scale in the rect your delegate returns for it. Where another part of the box sets its width, like the clock above, the text wraps at that width. Each try lays out only the `WrapToFit` widgets and the widgets around them again, and picking a width takes up to about 25 tries. The width is kept until the text, the constraints, the delegate, the fit, or the box's size changes, so a change elsewhere in the box that keeps its size, like the clock ticking, costs one layout, as it would without wrapping. A room that changes size every frame, as in an animation, picks it every frame.
 
 - Give a `Text` `TextWidthBasis.longestLine`, so the search can skip the widths that give the same lines.
-- Your delegate's `computeRects` is called for each width tried, and some 30 to 200 times with box sizes no layout gave, or about 350 for a rect that changes at nearly every shape of the box, so its rects should depend only on its arguments, and be cheap to compute.
+- Your delegate's `computeRects` is called for each width tried, up to about 25 times a layout, so its rects should depend only on its arguments. To skip widths that can't show the box larger, the search assumes the box's rect lies within the room, and that where `computeRects` returns the same rect for the box at two widths, it returns that rect at the widths between them.
 - `WrapToFit` wraps only inside the box, only with `BoxFit.contain` or `BoxFit.scaleDown`, and only when the `FittedBoxWithSiblings` has bounded constraints. With `BoxFit.scaleDown`, it wraps only as much as the box needs to fit unscaled.
 
 ## Add an Issue for Missing Features
