@@ -28,6 +28,14 @@ abstract class FittedBoxWithSiblingsDelegate {
   /// the first child (the "box"), which is laid out unconstrained.
   ///
   /// The returned list must contain exactly one finite rect per child.
+  ///
+  /// When the box has a [WrapToFit] inside it, this is also called for each
+  /// wrap width tried, up to about 25 times a layout, to find the width that
+  /// shows the box largest, so the rects should depend only on the
+  /// arguments. To skip widths that can't show the box larger, the search
+  /// assumes the box's rect lies within `constraints.biggest`, and that where
+  /// this returns the same rect for the box at two widths, it returns that
+  /// rect at the widths between them.
   List<Rect> computeRects(BoxConstraints constraints, Size boxSize);
 
   /// Called whenever a new delegate instance is provided to the render
@@ -80,8 +88,9 @@ class RenderFittedBoxWithSiblings extends RenderBox
       return;
     }
     // The fit affects the baseline of the first child, and with expandBox,
-    // its layout.
+    // its layout, and with a WrapToFit, its wrap width.
     _fit = value;
+    _wrapWidthStale = true;
     _clearPaintData();
     markNeedsLayout();
   }
@@ -157,6 +166,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
     _delegate = value;
     if (value.runtimeType != oldDelegate.runtimeType ||
         value.shouldRelayout(oldDelegate)) {
+      _wrapWidthStale = true;
       _clearPaintData();
       markNeedsLayout();
     }
@@ -318,6 +328,7 @@ class RenderFittedBoxWithSiblings extends RenderBox
     final result = _computeSize(
       constraints: constraints,
       layoutChild: ChildLayoutHelper.layoutChild,
+      searchWrapWidth: true,
     );
     size = result.size;
     _rects = result.rects;
@@ -355,9 +366,14 @@ class RenderFittedBoxWithSiblings extends RenderBox
   /// Lays out the children, returning this render object's size, the rects
   /// from the [delegate], and the constraints the first child (the "box") was
   /// last laid out with.
+  ///
+  /// When [searchWrapWidth] is true, which only a real layout can do, the
+  /// [WrapToFit] texts in the box wrap at the width that shows it largest.
+  /// Otherwise they wrap at the width the last layout picked.
   ({Size size, List<Rect> rects, BoxConstraints boxConstraints}) _computeSize({
     required BoxConstraints constraints,
     required ChildLayouter layoutChild,
+    bool searchWrapWidth = false,
   }) {
     if (childCount == 0) {
       return (
@@ -388,7 +404,9 @@ class RenderFittedBoxWithSiblings extends RenderBox
           'Positioned children are not supported in FittedBoxWithSiblings.',
         );
       } else if (identical(child, firstChild)) {
-        final childSize = layoutChild(child, const BoxConstraints());
+        final childSize = searchWrapWidth && _wrapTexts.isNotEmpty
+            ? _layoutBoxWrapped(child, nonPositionedConstraints)
+            : layoutChild(child, const BoxConstraints());
         rects = delegate.computeRects(nonPositionedConstraints, childSize);
 
         assert(() {
@@ -473,6 +491,211 @@ class RenderFittedBoxWithSiblings extends RenderBox
               )
             : null;
     }
+  }
+
+  // The WrapToFit texts this is the nearest RenderFittedBoxWithSiblings
+  // above. Those inside the box wrap at the width the search picks.
+  final _wrapTexts = <RenderWrapToFit>{};
+
+  // The box, room, and box size the search last picked the width for.
+  RenderBox? _wrapBox;
+  BoxConstraints? _wrapRoom;
+  Size? _wrapBoxSize;
+
+  // Whether a change other than to the room or the box's size could change
+  // the width the search picks: to a text, the delegate, or the fit.
+  bool _wrapWidthStale = true;
+
+  // Whether the texts are being marked as needing layout for a new width.
+  bool _markingWrapTexts = false;
+
+  /// Lays out the [box] with no constraints, wrapping the [WrapToFit] texts
+  /// inside it at the width that shows it largest in the [room], and returns
+  /// its size.
+  Size _layoutBoxWrapped(RenderBox box, BoxConstraints room) {
+    // The width is kept while nothing it depends on changes, as on a clock
+    // tick, which then costs one layout, as it would without wrapping. A new
+    // box counts as a change: reordering the children moves texts between the
+    // box and a sibling without detaching them.
+    if (!_wrapWidthStale && identical(box, _wrapBox) && room == _wrapRoom) {
+      final size = ChildLayoutHelper.layoutChild(box, const BoxConstraints());
+      if (size == _wrapBoxSize) return size;
+    }
+
+    // Anything that changes during the search counts for the next layout.
+    _wrapWidthStale = false;
+    _searchWrapWidth(box, room);
+    _wrapBox = box;
+    _wrapRoom = room;
+    return _wrapBoxSize = box.size;
+  }
+
+  /// Finds the widest wrap width at which the [box] shows largest in the
+  /// [room], and leaves the box laid out at it.
+  ///
+  /// Narrowing the width never makes the box wider or shorter. So between
+  /// two widths tried, the box is no narrower than at the narrower one, and
+  /// no shorter than at the wider one, which bounds how large the room, or
+  /// the rect the delegate gave at both, if it gave the same one, could show
+  /// it there. This tries the widths between the two that could show it
+  /// largest, until no two could beat the best found, or it has tried about
+  /// 25.
+  void _searchWrapWidth(RenderBox box, BoxConstraints room) {
+    // Unwrapped first: where wrapping can't help, that's the layout. This
+    // also unwraps a WrapToFit outside the box, which never wraps.
+    _setWrapWidth(_wrapTexts, double.infinity);
+    ChildLayoutHelper.layoutChild(box, const BoxConstraints());
+    final texts = [
+      for (final text in _wrapTexts)
+        if (_isInBox(text)) text,
+    ];
+
+    // Only the fits that show the whole box can show more of it by wrapping.
+    final maxScale = switch (_fit) {
+      BoxFit.contain => double.infinity,
+      BoxFit.scaleDown => 1.0,
+      _ => null,
+    };
+    final roomSize = room.biggest;
+    if (texts.isEmpty ||
+        maxScale == null ||
+        !roomSize.isFinite ||
+        roomSize.isEmpty) {
+      return;
+    }
+
+    // The layouts tried, from the narrowest.
+    final trials = <_Trial>[];
+    _Trial trial(double width) {
+      _setWrapWidth(texts, width);
+      final size = ChildLayoutHelper.layoutChild(box, const BoxConstraints());
+      var floor = 0.0;
+      for (final text in texts) {
+        floor = math.max(floor, text._laidOutWidth);
+      }
+      floor = math.min(floor, width);
+      final rect = size.isEmpty
+          ? null
+          : delegate.computeRects(room, size).firstOrNull;
+      final fits = rect != null && rect.isFinite && !rect.isEmpty;
+      final t = (
+        w: width,
+        floor: floor,
+        size: size,
+        rect: fits ? rect.size : Size.zero,
+        scale: fits
+            ? math.min(
+                maxScale,
+                math.min(rect.width / size.width, rect.height / size.height),
+              )
+            : 0.0,
+      );
+
+      // Every width from a layout's widest line up to the widest width tried
+      // that gave it gives the same lines.
+      final i = trials.indexWhere((other) => other.floor >= floor);
+      if (i < 0) {
+        trials.add(t);
+      } else if (trials[i].floor != floor) {
+        trials.insert(i, t);
+      } else if (width > trials[i].w) {
+        trials[i] = t;
+      }
+      return t;
+    }
+
+    // The widest width worth trying is the widest line unwrapped, and the
+    // narrowest is the longest word.
+    final unwrapped = trial(double.infinity);
+    var lo = 1.0;
+    for (final text in texts) {
+      lo = math.max(lo, text.getMinIntrinsicWidth(double.infinity));
+    }
+    if (unwrapped.size.isEmpty ||
+        unwrapped.scale >= maxScale ||
+        lo >= unwrapped.floor) {
+      return;
+    }
+    trial(lo);
+
+    // The layout with the largest scale, and of those, the widest lines.
+    _Trial best() => trials.reduce(
+      (best, t) =>
+          t.scale > best.scale ||
+              (t.scale == best.scale && t.floor > best.floor)
+          ? t
+          : best,
+    );
+
+    // Where the rect changes between most widths, every line break could
+    // beat the best, so the search stops after about 25 layouts.
+    for (var tries = 2; tries < 25; tries++) {
+      final most = best();
+      var split = double.nan;
+      var splitBound = double.negativeInfinity;
+      for (var i = 0; i + 1 < trials.length; i++) {
+        final narrower = trials[i];
+        final wider = trials[i + 1];
+        // Lines within half a pixel show the box at nearly the same scale.
+        if (wider.floor - narrower.w < 0.5) continue;
+
+        final rect = narrower.rect == wider.rect ? narrower.rect : roomSize;
+        final bound = math.min(
+          maxScale,
+          math.min(
+            rect.width / narrower.size.width,
+            rect.height / wider.size.height,
+          ),
+        );
+        // The widths between are wider than the narrower one, so they win a
+        // tie with it, or with any narrower one.
+        final couldBeat =
+            bound > most.scale ||
+            (bound == most.scale && narrower.floor >= most.floor);
+        if (couldBeat && bound > splitBound) {
+          splitBound = bound;
+          split = math.sqrt(narrower.w * wider.floor);
+        }
+      }
+      if (split.isNaN) break;
+      trial(split);
+    }
+
+    _setWrapWidth(texts, best().w);
+    ChildLayoutHelper.layoutChild(box, const BoxConstraints());
+  }
+
+  /// Whether [text] is inside the first child (the "box"), rather than a
+  /// sibling.
+  bool _isInBox(RenderObject text) {
+    RenderObject? node = text;
+    while (node != null && node.parent != this) {
+      node = node.parent;
+    }
+    return node != null && identical(node, firstChild);
+  }
+
+  /// Has the [texts] wrap at [width], marking each that changes as needing
+  /// layout, so laying out the box lays out only them again.
+  void _setWrapWidth(Iterable<RenderWrapToFit> texts, double width) {
+    // Marking a descendant is allowed in a layout callback, which is how
+    // LayoutBuilder rebuilds its child. The marks reach this, clearing its
+    // cached intrinsic sizes, which depend on the wrap width, but the
+    // callback keeps them from going above it.
+    invokeLayoutCallback<BoxConstraints>((_) {
+      _markingWrapTexts = true;
+      try {
+        for (final text in texts) {
+          if (text._wrapWidth != width) {
+            text
+              .._wrapWidth = width
+              ..markNeedsLayout();
+          }
+        }
+      } finally {
+        _markingWrapTexts = false;
+      }
+    });
   }
 
   /// In debug mode, throws a [FlutterError] if the number of rects returned
@@ -743,6 +966,120 @@ class RenderFittedBoxWithSiblings extends RenderBox
       ..add(EnumProperty<Axis>('expandBox', expandBox, defaultValue: null));
   }
 }
+
+/// The render object for [WrapToFit].
+class RenderWrapToFit extends RenderProxyBox {
+  /// Creates a render object that lays out its [child] no wider than the
+  /// wrap width the nearest [RenderFittedBoxWithSiblings] above it picks.
+  RenderWrapToFit({RenderBox? child}) : super(child);
+
+  // The nearest RenderFittedBoxWithSiblings above this.
+  RenderFittedBoxWithSiblings? _scope;
+
+  // The width the scope has this wrap at.
+  double _wrapWidth = double.infinity;
+
+  // The width this was last laid out at, which the scope reads mid-layout,
+  // where it may not ask a descendant for its size.
+  double _laidOutWidth = 0;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    var node = parent;
+    while (node != null && node is! RenderFittedBoxWithSiblings) {
+      node = node.parent;
+    }
+    _scope = node as RenderFittedBoxWithSiblings?;
+    _scope
+      ?.._wrapTexts.add(this)
+      .._wrapWidthStale = true;
+    // Start unwrapped: a width picked where this was before doesn't hold
+    // here, and only the scope's search picks another, for a text in its box.
+    if (_wrapWidth.isFinite) {
+      _wrapWidth = double.infinity;
+      markNeedsLayout();
+    }
+  }
+
+  @override
+  void detach() {
+    _scope
+      ?.._wrapTexts.remove(this)
+      .._wrapWidthStale = true;
+    _scope = null;
+    super.detach();
+  }
+
+  @override
+  void markNeedsLayout() {
+    // A change inside this can change the width that shows the box largest,
+    // when this is in the box: one in a sibling never wraps.
+    final scope = _scope;
+    if (scope != null && !scope._markingWrapTexts && scope._isInBox(this)) {
+      scope._wrapWidthStale = true;
+    }
+    super.markNeedsLayout();
+  }
+
+  // Sized as it lays out, no wider than the wrap width, so a parent that
+  // sizes it by these, such as an IntrinsicWidth, lets it wrap.
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      math.min(super.computeMaxIntrinsicWidth(height), _wrapWidth);
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      super.computeMinIntrinsicHeight(math.min(width, _wrapWidth));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      super.computeMaxIntrinsicHeight(math.min(width, _wrapWidth));
+
+  @override
+  @protected
+  Size computeDryLayout(covariant BoxConstraints constraints) =>
+      child?.getDryLayout(_wrapped(constraints)) ?? constraints.smallest;
+
+  @override
+  double? computeDryBaseline(
+    covariant BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => child?.getDryBaseline(_wrapped(constraints), baseline);
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+    } else {
+      child.layout(_wrapped(constraints), parentUsesSize: true);
+      size = constraints.constrain(child.size);
+    }
+    _laidOutWidth = size.width;
+  }
+
+  BoxConstraints _wrapped(BoxConstraints constraints) => constraints.copyWith(
+    maxWidth: math.max(
+      constraints.minWidth,
+      math.min(constraints.maxWidth, _wrapWidth),
+    ),
+  );
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(
+      DoubleProperty('wrapWidth', _wrapWidth, defaultValue: double.infinity),
+    );
+  }
+}
+
+/// One layout of the box at the wrap width `w`, where `floor` is the
+/// narrowest width that gives the same lines, the widest line, `rect` is
+/// the size of the box's rect, and `scale` is the scale the fit gives the
+/// box in it.
+typedef _Trial = ({double w, double floor, Size size, Size rect, double scale});
 
 extension on Iterable<Rect> {
   Rect get boundingRect {

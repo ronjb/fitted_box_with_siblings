@@ -22,7 +22,7 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fitted_box_with_siblings: ^2.0.0
+  fitted_box_with_siblings: ^2.2.0
 ```
 
 ## Usage
@@ -83,6 +83,38 @@ If your rects depend on state outside the delegate, pass that state in through t
 | `stackFit` | `StackFit` | `StackFit.loose` | How to transform the constraints passed to `computeRects`. |
 | `expandBox` | `Axis?` | `null` | After `computeRects`, grows the first child along this axis to fill its rect at the scale the `fit` applies, so a child that can grow, such as a `Column` with `MainAxisSize.max`, fills its rect. |
 | `delegate` | `FittedBoxWithSiblingsDelegate` | required | Delegate whose `computeRects` method returns rects for each child. |
+
+### Wrapping text to fit
+
+The box is laid out with no constraints, so a long line of text in it stays one line, and makes the whole box small. Put the text inside a `WrapToFit` to let it wrap where that shows the box larger:
+
+```dart
+FittedBoxWithSiblings(
+  delegate: const HeaderAndBoxDelegate(),
+  children: [
+    Column(
+      children: [
+        const Text('12:34', style: TextStyle(fontSize: 48)),
+        const WrapToFit(
+          child: Text(
+            'Ann Cole, Ben Diaz, Cal Evans, Dee Fox, Eli Grant, Fay Hall',
+            textAlign: TextAlign.center,
+            textWidthBasis: TextWidthBasis.longestLine,
+          ),
+        ),
+      ],
+    ),
+    Container(color: Colors.yellow, child: Text('Left header')),
+    Container(color: Colors.blue, child: Text('Right header')),
+  ],
+)
+```
+
+`FittedBoxWithSiblings` tries wrap widths during layout, and keeps the widest one that gives the box the largest scale in the rect your delegate returns for it. Where another part of the box sets its width, like the clock above, the text wraps at that width. Each try lays out only the `WrapToFit` widgets and the widgets around them again, and picking a width takes up to about 25 tries. The width is kept until the text, the constraints, the delegate, the fit, or the box's size changes, so a change elsewhere in the box that keeps its size, like the clock ticking, costs one layout, as it would without wrapping. A room that changes size every frame, as in an animation, picks it every frame.
+
+- Give a `Text` `TextWidthBasis.longestLine`, so the search can skip the widths that give the same lines.
+- Your delegate's `computeRects` is called for each width tried, up to about 25 times a layout, so its rects should depend only on its arguments. To skip widths that can't show the box larger, the search assumes the box's rect lies within the room, and that where `computeRects` returns the same rect for the box at two widths, it returns that rect at the widths between them.
+- `WrapToFit` wraps only inside the box, only with `BoxFit.contain` or `BoxFit.scaleDown`, and only when the `FittedBoxWithSiblings` has bounded constraints. With `BoxFit.scaleDown`, it wraps only as much as the box needs to fit unscaled.
 
 ## Add an Issue for Missing Features
 

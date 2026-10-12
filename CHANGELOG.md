@@ -1,3 +1,8 @@
+## 2.2.0
+
+* Added `WrapToFit`. A `Text` in the first child (the "box") inside a `WrapToFit` wraps at the width that shows the box largest in the rect the delegate returns for it, instead of keeping to its own lines, however long. `FittedBoxWithSiblings` tries widths during layout, laying out only the `WrapToFit` widgets again for each, and keeps the width until the text, the constraints, the delegate, the fit, or the box's size changes. It wraps with `BoxFit.contain` and `BoxFit.scaleDown`, and with `BoxFit.scaleDown`, only as much as the box needs to fit unscaled. A box without a `WrapToFit` lays out as before.
+* When the box has a `WrapToFit`, the delegate's `computeRects` is also called during layout for each width tried, up to about 25 times, so its rects should depend only on its arguments. To skip widths that can't show the box larger, the search assumes the box's rect lies within the room, and that where `computeRects` returns the same rect for the box at two widths, it returns that rect at the widths between them.
+
 ## 2.1.0
 
 * Added `expandBox`. When set to an `Axis`, the first child (the "box") is laid out again after `computeRects`, grown along that axis to fill its rect at the scale the `fit` applies, so a box that can grow, such as a `Column` with `MainAxisSize.max` and `MainAxisAlignment.spaceEvenly`, fills its rect instead of leaving space beside it. It has no effect when the `fit` already fills the rect along that axis, such as `BoxFit.cover`. `computeRects` still receives the box's natural size, and the rects are not recomputed.

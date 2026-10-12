@@ -19,6 +19,9 @@ import 'render_fitted_box_with_siblings.dart';
 /// widget reports the box's baseline where it is painted, so a scaled box
 /// lines up with its neighbors in a baseline-aligned [Row].
 ///
+/// Text in the box can wrap where that shows the box larger: see
+/// [WrapToFit].
+///
 /// See also:
 ///
 /// * [FittedBox], which scales and positions its child within itself according
@@ -187,4 +190,48 @@ class FittedBoxWithSiblings extends MultiChildRenderObjectWidget {
     }
     return true;
   }
+}
+
+/// A widget that lays out its child, such as a [Text], no wider than the
+/// width that shows the first child (the "box") of the nearest
+/// [FittedBoxWithSiblings] above it largest, so the text wraps where that
+/// lets the box scale up.
+///
+/// The box is laid out with no constraints, so without this, a text in it
+/// keeps to the lines it has, however long they are, and a long line makes
+/// the whole box small.
+///
+/// The [FittedBoxWithSiblings] picks the width in its layout. It tries
+/// widths from the widest line of the unwrapped text down to its longest
+/// word, laying out only the [WrapToFit] widgets again for each, and keeps
+/// the one that gives the box the largest scale in the rect its
+/// [FittedBoxWithSiblings.delegate] returns for the box's size there, so
+/// where the siblings go is part of it. Where several widths do equally well,
+/// it keeps the widest, and it widens the text into any room the box leaves
+/// beside it, so the text wraps at the width another part of the box sets.
+/// All the [WrapToFit] widgets in the box wrap at the same width.
+///
+/// The width is kept while the constraints, the [WrapToFit] widgets in the
+/// box and their children, the delegate, the fit, and the box's size stay
+/// the same, as when another text in the box changes but keeps its size.
+/// Anything else picks it again, which lays out the [WrapToFit] widgets
+/// again up to about 25 times, so a room that changes size every frame, as
+/// in an animation, picks it every frame.
+///
+/// Give a [Text] child [TextWidthBasis.longestLine], so it is as wide as its
+/// widest line, which lets the search skip the widths that give the same
+/// lines.
+///
+/// The text doesn't wrap, and this lays out its child as is, when it's in a
+/// sibling instead of the box, when the [FittedBoxWithSiblings.fit] is
+/// anything but [BoxFit.contain] or [BoxFit.scaleDown], or when the
+/// [FittedBoxWithSiblings] has unbounded constraints. A dry layout, which
+/// can't try widths, uses the width the last layout picked.
+class WrapToFit extends SingleChildRenderObjectWidget {
+  /// Creates a widget that lays out its [child] no wider than the width that
+  /// shows the box of the nearest [FittedBoxWithSiblings] above it largest.
+  const WrapToFit({super.key, super.child});
+
+  @override
+  RenderWrapToFit createRenderObject(BuildContext context) => RenderWrapToFit();
 }
